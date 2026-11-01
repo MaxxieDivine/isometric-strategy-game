@@ -16,6 +16,11 @@ static func all() -> Array[Dictionary]:
 	return _defs
 
 
+static func has(id: String) -> bool:
+	all()
+	return _by_id.has(id)
+
+
 static func get_def(id: String) -> Dictionary:
 	all()
 	if not _by_id.has(id):

@@ -15,6 +15,10 @@ extends RefCounted
 ##   city_grew        { city_id, size }
 ##   city_shrank      { city_id, size }
 ##   city_starving    { city_id }
+##   city_built       { city_id, item, unit_id? }   (unit_id when a unit was built)
+##   city_idle        { city_id }   (its queue just ran out)
+##   city_queue_changed { city_id }
+##   build_failed     { city_id, reason }
 ##   turn_started     { turn }   (city events of the new turn follow it)
 
 
@@ -73,6 +77,32 @@ static func toggle_worked_tile(state: GameState, city_id: int, cell: Vector2i) -
 	var city := state.get_city(city_id)
 	if city != null and CityRules.toggle_worked_tile(state, city, cell):
 		events.append({ "type": "city_tiles_changed", "city_id": city_id })
+	return events
+
+
+## Adds `item_id` (a unit or building id) to the end of the city's queue.
+static func enqueue_build(state: GameState, city_id: int, item_id: String) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	var city := state.get_city(city_id)
+	if city == null:
+		return events
+	var reason := Production.can_enqueue(city, item_id)
+	if reason != "":
+		events.append({ "type": "build_failed", "city_id": city_id, "reason": reason })
+		return events
+	city.queue.append(item_id)
+	events.append({ "type": "city_queue_changed", "city_id": city_id })
+	return events
+
+
+## Removes the queue entry at `index`. Stored production stays in the box.
+static func remove_from_queue(state: GameState, city_id: int, index: int) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	var city := state.get_city(city_id)
+	if city == null or index < 0 or index >= city.queue.size():
+		return events
+	city.queue.remove_at(index)
+	events.append({ "type": "city_queue_changed", "city_id": city_id })
 	return events
 
 

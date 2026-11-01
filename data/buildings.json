@@ -1,0 +1,8 @@
+{
+	"version": 1,
+	"buildings": [
+		{ "id": "granary",    "name": "Granary",    "article": "a", "cost": 40, "sprite": "building_granary",    "placeholder_color": "#d9b44a", "letter": "G", "effects": { "food_kept_on_growth_percent": 50 } },
+		{ "id": "library",    "name": "Library",    "article": "a", "cost": 60, "sprite": "building_library",    "placeholder_color": "#5aa6e0", "letter": "L", "effects": { "science_percent": 50 } },
+		{ "id": "city_walls", "name": "City Walls", "article": "",  "cost": 60, "sprite": "building_city_walls", "placeholder_color": "#9a9a9a", "letter": "W", "effects": { "defense_percent": 100 } }
+	]
+}

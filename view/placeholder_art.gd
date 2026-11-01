@@ -41,6 +41,40 @@ static func draw_city_block(canvas: CanvasItem, center: Vector2, size: Vector2, 
 	draw_centered_text(canvas, center, label, int(size.y * 0.8), color)
 
 
+## A small building marker: a beveled square in `color` with a letter.
+static func draw_building_marker(canvas: CanvasItem, center: Vector2, size: float, color: Color, letter: String) -> void:
+	var rect := Rect2(center - Vector2.ONE * size / 2.0, Vector2.ONE * size)
+	canvas.draw_rect(rect, color)
+	canvas.draw_line(rect.position + Vector2(1, 1), Vector2(rect.end.x - 1, rect.position.y + 1), color.lightened(0.35), 1.5)
+	canvas.draw_rect(rect, color.darkened(0.6), false, 1.0)
+	draw_centered_text(canvas, center, letter, int(size * 0.8), color)
+
+
+## A little person (a citizen) standing on `feet`, `height` pixels tall:
+## light fill with a dark outline and a soft shadow, readable on any terrain.
+static func draw_citizen(canvas: CanvasItem, feet: Vector2, height: float, fill: Color, outline: Color) -> void:
+	var h := height
+	canvas.draw_set_transform(feet, 0.0, Vector2(1.0, 0.45))
+	canvas.draw_circle(Vector2.ZERO, h * 0.32, Color(0, 0, 0, 0.35))
+	canvas.draw_set_transform(Vector2.ZERO)
+	var top := feet.y - h * 0.62
+	var body := PackedVector2Array([
+		Vector2(feet.x - h * 0.26, feet.y),
+		Vector2(feet.x - h * 0.22, top + h * 0.07),
+		Vector2(feet.x - h * 0.12, top),
+		Vector2(feet.x + h * 0.12, top),
+		Vector2(feet.x + h * 0.22, top + h * 0.07),
+		Vector2(feet.x + h * 0.26, feet.y),
+	])
+	canvas.draw_colored_polygon(body, fill)
+	var ring := body.duplicate()
+	ring.append(body[0])
+	canvas.draw_polyline(ring, outline, 1.5, true)
+	var head := Vector2(feet.x, top - h * 0.18)
+	canvas.draw_circle(head, h * 0.2 + 1.3, outline)
+	canvas.draw_circle(head, h * 0.2, fill)
+
+
 ## A small yield marker: circle, square, or diamond.
 static func draw_yield_pip(canvas: CanvasItem, center: Vector2, color: Color, shape: String, radius: float = 3.5) -> void:
 	var outline := Color(0, 0, 0, 0.7 * color.a)

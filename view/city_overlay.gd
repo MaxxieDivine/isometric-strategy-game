@@ -1,9 +1,14 @@
 class_name CityOverlay
 extends Node2D
 ## While a city panel is open: outlines the work radius, marks worked tiles,
-## and shows each tile's yields (dim for unworked tiles).
+## and shows each tile's yields (dim for unworked tiles). The city tile is
+## outlined in gold; worked tiles in white (their citizens are drawn by
+## TerritoryLayer).
 
-const WORKED_COLOR := Color(1.0, 0.86, 0.4)
+const CENTER_COLOR := Color(1.0, 0.86, 0.4)
+const WORKED_COLOR := Color(1.0, 1.0, 1.0)
+const LOCK_COLOR := Color(1.0, 0.86, 0.4)
+const LOCK_OFFSET := Vector2(9, -5)
 const FREE_COLOR := Color(1.0, 1.0, 1.0)
 const TAKEN_COLOR := Color(0.9, 0.3, 0.25)
 const YIELD_OFFSET := Vector2(0, 7)
@@ -36,13 +41,15 @@ func _draw() -> void:
 		var yield_alpha := 1.0
 		match status:
 			"center":
-				draw_polyline(outline, WORKED_COLOR, 2.0)
+				draw_colored_polygon(diamond, Color(CENTER_COLOR, 0.15))
+				draw_polyline(outline, CENTER_COLOR, 3.0)
 			"worked", "locked":
-				draw_colored_polygon(diamond, Color(WORKED_COLOR, 0.22))
-				draw_polyline(outline, WORKED_COLOR, 2.5 if status == "locked" else 1.5)
+				draw_colored_polygon(diamond, Color(WORKED_COLOR, 0.12))
+				draw_polyline(outline, Color(WORKED_COLOR, 0.7), 1.5)
 				if status == "locked":
-					draw_circle(pos + Vector2(0, -8), 3.0, WORKED_COLOR)
-					draw_circle(pos + Vector2(0, -8), 3.0, Color(0, 0, 0, 0.7), false, 1.0)
+					# Hand-placed: a small gold pin beside the citizen.
+					draw_circle(pos + LOCK_OFFSET, 3.0, LOCK_COLOR)
+					draw_circle(pos + LOCK_OFFSET, 3.0, Color(0, 0, 0, 0.7), false, 1.0)
 			"taken":
 				draw_colored_polygon(diamond, Color(TAKEN_COLOR, 0.2))
 				draw_polyline(outline, Color(TAKEN_COLOR, 0.5), 1.0)

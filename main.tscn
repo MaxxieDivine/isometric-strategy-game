@@ -12,12 +12,16 @@
 [ext_resource type="Script" path="res://view/cities_layer.gd" id="10_cities_layer"]
 [ext_resource type="Script" path="res://view/city_overlay.gd" id="11_city_overlay"]
 [ext_resource type="Script" path="res://ui/city_panel.gd" id="12_city_panel"]
+[ext_resource type="Script" path="res://view/territory_layer.gd" id="13_territory_layer"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
 
 [node name="MapView" type="TileMapLayer" parent="."]
 script = ExtResource("2_map_view")
+
+[node name="TerritoryLayer" type="Node2D" parent="."]
+script = ExtResource("13_territory_layer")
 
 [node name="FogView" type="TileMapLayer" parent="."]
 script = ExtResource("3_fog_view")

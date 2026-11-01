@@ -24,7 +24,21 @@ func sync(state: GameState, map_view: MapView) -> void:
 			add_child(view)
 			_views[city.id] = view
 		view.set_city_size(city.size)
+		view.set_buildings(_building_entries(city))
 	for id: int in _views.keys():
 		if not alive.has(id):
 			(_views[id] as CityView).queue_free()
 			_views.erase(id)
+
+
+func _building_entries(city: CityState) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for id in city.buildings:
+		var def := BuildingDefs.get_def(id)
+		entries.append({
+			"id": id,
+			"sprite": String(def.get("sprite", "")),
+			"color": Color.html(String(def.get("placeholder_color", "#cccccc"))),
+			"letter": String(def.get("letter", "?")),
+		})
+	return entries

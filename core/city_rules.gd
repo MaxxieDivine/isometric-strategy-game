@@ -193,17 +193,26 @@ static func _least_valuable_tile(state: GameState, city: CityState) -> Vector2i:
 	return worst
 
 
+## Science per turn: the city's trade plus building bonuses (e.g. Library +50%).
+static func science(state: GameState, city: CityState) -> int:
+	var trade := Yields.city_total(state, city)[Yields.TRADE]
+	@warning_ignore("integer_division")
+	return trade + trade * BuildingDefs.effect(city, "science_percent") / 100
+
+
 # --- Turn processing ----------------------------------------------------------
 
-## Grows or starves the city and banks production and trade.
+## Grows or starves the city, works the build queue, and banks science.
 static func process_turn(state: GameState, city: CityState) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	var total := Yields.city_total(state, city)
 	var surplus := total[Yields.FOOD] - food_per_citizen() * city.size
 	var box := city.food_box + surplus
 	if box >= food_box_size(city.size):
+		# A granary keeps part of the full box; otherwise it empties.
+		@warning_ignore("integer_division")
+		city.food_box = food_box_size(city.size) * BuildingDefs.effect(city, "food_kept_on_growth_percent") / 100
 		city.size += 1
-		city.food_box = 0
 		auto_assign(state, city)
 		events.append({ "type": "city_grew", "city_id": city.id, "size": city.size })
 	elif box < 0:
@@ -216,6 +225,6 @@ static func process_turn(state: GameState, city: CityState) -> Array[Dictionary]
 			events.append({ "type": "city_starving", "city_id": city.id })
 	else:
 		city.food_box = box
-	city.production_box += total[Yields.PRODUCTION]
-	state.add_science(city.owner, total[Yields.TRADE])
+	events.append_array(Production.process(state, city, total[Yields.PRODUCTION]))
+	state.add_science(city.owner, science(state, city))
 	return events

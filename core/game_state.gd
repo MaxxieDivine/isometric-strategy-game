@@ -2,11 +2,12 @@ class_name GameState
 extends RefCounted
 ## The whole game as plain data. Everything a save file needs lives here.
 
-const VERSION := 2
+const VERSION := 3
 
 var map: MapState
 var turn: int = 1
-## [{ "id": int, "name": String, "color": "#rrggbb", "science": int }]
+## [{ "id": int, "name": String, "color": "#rrggbb", "civ": String, "science": int }]
+## `civ` is an id in data/civs.json (border color etc.); "" for none.
 var players: Array[Dictionary] = []
 var units: Array[UnitState] = []
 var next_unit_id: int = 1
@@ -21,9 +22,9 @@ var rng := RandomNumberGenerator.new()
 # --- Players ------------------------------------------------------------------
 
 ## Adds a player and returns its id. Requires `map` to be set.
-func add_player(player_name: String, color: String) -> int:
+func add_player(player_name: String, color: String, civ: String = "") -> int:
 	var player_id := players.size()
-	players.append({ "id": player_id, "name": player_name, "color": color, "science": 0 })
+	players.append({ "id": player_id, "name": player_name, "color": color, "civ": civ, "science": 0 })
 	var tiles := PackedByteArray()
 	tiles.resize(map.width * map.height)
 	explored.append(tiles)
@@ -136,6 +137,15 @@ func cities_of(owner: int) -> Array[CityState]:
 	return result
 
 
+## Cities of `owner` with nothing queued.
+func idle_cities(owner: int) -> Array[CityState]:
+	var result: Array[CityState] = []
+	for city in cities:
+		if city.owner == owner and city.is_idle():
+			result.append(city)
+	return result
+
+
 # --- Saving -------------------------------------------------------------------
 
 func to_dict() -> Dictionary:
@@ -173,6 +183,7 @@ static func from_dict(data: Dictionary) -> GameState:
 			"id": int(entry["id"]),
 			"name": entry["name"],
 			"color": entry["color"],
+			"civ": String(entry.get("civ", "")),
 			"science": int(entry.get("science", 0)),
 		})
 	for entry: Variant in data["units"]:

@@ -18,6 +18,7 @@ var _open_city := NO_CITY
 var _seed_picker := RandomNumberGenerator.new()
 
 @onready var map_view: MapView = $MapView
+@onready var territory_layer: TerritoryLayer = $TerritoryLayer
 @onready var fog_view: FogView = $FogView
 @onready var path_overlay: PathOverlay = $PathOverlay
 @onready var highlight: TileHighlight = $TileHighlight
@@ -34,7 +35,11 @@ func _ready() -> void:
 	InputActions.ensure_defaults()
 	hud.end_turn_requested.connect(_end_turn)
 	hud.found_city_requested.connect(_found_city)
+	hud.end_turn_confirmed.connect(_confirm_end_turn)
+	hud.idle_city_jump_requested.connect(_jump_to_idle_city)
 	city_panel.close_requested.connect(_close_city)
+	city_panel.enqueue_requested.connect(_enqueue_build)
+	city_panel.remove_requested.connect(_remove_from_queue)
 	_seed_picker.randomize()
 	_new_game(_seed_picker.randi())
 
@@ -47,7 +52,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("found_city"):
 		_found_city()
 	elif event.is_action_pressed("deselect"):
-		if _open_city != NO_CITY:
+		if hud.is_idle_prompt_visible():
+			hud.hide_idle_prompt()
+		elif _open_city != NO_CITY:
 			_close_city()
 		else:
 			_select_unit(NO_UNIT)
@@ -77,6 +84,7 @@ func _new_game(map_seed: int) -> void:
 	_selected_unit = NO_UNIT
 	_close_city()
 	_hide_tile_info()
+	hud.hide_idle_prompt()
 	# Inset by half a tile so the jagged stacked-row edges stay off screen.
 	var half := Vector2(TerrainTilesetBuilder.TILE_SIZE) / 2.0
 	var bounds := map_view.get_grid_world_rect(MAP_WIDTH, MAP_HEIGHT).grow_individual(-half.x, -half.y, -half.x, -half.y)
@@ -90,7 +98,21 @@ func _new_game(map_seed: int) -> void:
 	print("New game: seed %d, start %s" % [map_seed, units[0].position if not units.is_empty() else Vector2i(-1, -1)])
 
 
+## End Turn: if a city has nothing to build, ask first (pressing End Turn
+## again while asked means "end anyway").
 func _end_turn() -> void:
+	if hud.is_idle_prompt_visible():
+		_confirm_end_turn()
+		return
+	var idle := state.idle_cities(PLAYER)
+	if not idle.is_empty():
+		hud.show_idle_prompt(idle[0].id, idle[0].name, idle.size() - 1)
+		return
+	_confirm_end_turn()
+
+
+func _confirm_end_turn() -> void:
+	hud.hide_idle_prompt()
 	_apply_events(GameActions.end_turn(state))
 	_selected_unit = NO_UNIT
 	_select_next_unit()
@@ -222,6 +244,22 @@ func _close_city() -> void:
 	city_overlay.clear()
 
 
+func _jump_to_idle_city(city_id: int) -> void:
+	hud.hide_idle_prompt()
+	if state.get_city(city_id) != null:
+		_open_city_panel(city_id)
+
+
+func _enqueue_build(item_id: String) -> void:
+	if _open_city != NO_CITY:
+		_apply_events(GameActions.enqueue_build(state, _open_city, item_id))
+
+
+func _remove_from_queue(index: int) -> void:
+	if _open_city != NO_CITY:
+		_apply_events(GameActions.remove_from_queue(state, _open_city, index))
+
+
 func _toggle_worked_tile(city: CityState, cell: Vector2i) -> void:
 	var events := GameActions.toggle_worked_tile(state, city.id, cell)
 	if events.is_empty():
@@ -239,6 +277,22 @@ func _refresh_city_ui() -> void:
 		_close_city()
 		return
 	var total := Yields.city_total(state, city)
+	var production := total[Yields.PRODUCTION]
+	var queue_names: Array = []
+	for id in city.queue:
+		queue_names.append(Production.display_name(id))
+	var available: Array = []
+	for id in Production.available_items(city):
+		available.append({
+			"id": id,
+			"name": Production.display_name(id),
+			"cost": Production.cost(id),
+			# Next in line counts the stored production; behind others it starts from zero.
+			"turns": Production.turns_for(city, id, production) if city.queue.is_empty() 				else (ceili(float(Production.cost(id)) / production) if production > 0 else -1),
+		})
+	var building_names: Array = []
+	for id in city.buildings:
+		building_names.append(Production.display_name(id))
 	city_panel.show_city({
 		"name": city.name,
 		"size": city.size,
@@ -246,10 +300,17 @@ func _refresh_city_ui() -> void:
 		"food_box_size": CityRules.food_box_size(city.size),
 		"food_surplus": CityRules.food_surplus(state, city),
 		"turns_to_grow": CityRules.turns_to_grow(state, city),
-		"production": total[Yields.PRODUCTION],
+		"production": production,
 		"production_box": city.production_box,
+		"queue": queue_names,
+		"current_cost": Production.cost(city.queue[0]) if not city.queue.is_empty() else 0,
+		"turns_to_complete": Production.turns_to_complete(city, production),
+		"blocked": Production.blocked_reason(city, city.queue[0]) if not city.queue.is_empty() else "",
+		"available": available,
+		"buildings": building_names,
 		"trade": total[Yields.TRADE],
 		"science": int(state.players[city.owner]["science"]),
+		"science_per_turn": CityRules.science(state, city),
 		"working": city.worked.size(),
 		"idle": city.idle_citizens(),
 	})
@@ -287,13 +348,19 @@ func _apply_events(events: Array[Dictionary]) -> void:
 				hud.notify(event["reason"])
 			"city_founded":
 				var city := state.get_city(event["city_id"])
-				hud.notify("%s is founded!" % city.name, PackedStringArray(["Click the city to manage its citizens"]))
+				hud.notify("%s is founded!" % city.name, PackedStringArray(["Click the city to choose what to build"]))
 			"city_grew":
 				city_news.append("%s grew to size %d" % [_city_name(event["city_id"]), event["size"]])
 			"city_shrank":
 				city_news.append("%s starved down to size %d" % [_city_name(event["city_id"]), event["size"]])
 			"city_starving":
 				city_news.append("%s is starving" % _city_name(event["city_id"]))
+			"city_built":
+				city_news.append("%s built %s" % [_city_name(event["city_id"]), Production.news_name(event["item"])])
+			"city_idle":
+				city_news.append("%s has nothing to build" % _city_name(event["city_id"]))
+			"build_failed":
+				hud.notify(event["reason"])
 			"turn_started":
 				new_turn = event["turn"]
 	if new_turn != -1:
@@ -305,6 +372,7 @@ func _apply_events(events: Array[Dictionary]) -> void:
 func _refresh_world() -> void:
 	var explored := state.explored[PLAYER]
 	map_view.render(state.map, explored)
+	territory_layer.sync(state, map_view, PLAYER)
 	fog_view.refresh(state.map.width, state.map.height, explored, Fog.compute_visible(state, PLAYER))
 	cities_layer.sync(state, map_view)
 	units_layer.sync(state, _selected_unit, map_view)
@@ -332,7 +400,10 @@ func _refresh_paths() -> void:
 
 
 func _refresh_turn_status() -> void:
-	hud.set_turn_done(state.units_needing_orders(PLAYER).is_empty())
+	var idle := state.idle_cities(PLAYER)
+	if idle.is_empty():
+		hud.hide_idle_prompt()
+	hud.set_turn_done(state.units_needing_orders(PLAYER).is_empty() and idle.is_empty())
 
 
 # --- Info panel ---------------------------------------------------------------

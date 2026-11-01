@@ -1,18 +1,29 @@
 class_name CityPanel
 extends PanelContainer
-## City details: size, food box and growth, production, trade, citizens.
+## City details: size, food box and growth, production and the build queue,
+## trade, citizens, and buildings.
 
 signal close_requested
+signal enqueue_requested(item_id: String)
+signal remove_requested(index: int)
 
 const FOOD_COLOR := Color("#7bd04f")
 const STARVING_COLOR := Color("#e0584a")
 const MUTED := Color(0.75, 0.78, 0.85)
+const PRODUCTION_COLOR := Color("#d9813a")
+const WARNING_COLOR := Color("#f2b84e")
+const SECTION_COLOR := Color(0.6, 0.62, 0.68)
 
 var _name_label: Label
 var _size_label: Label
 var _food_bar: ProgressBar
 var _food_label: Label
 var _production_label: Label
+var _build_bar: ProgressBar
+var _build_label: Label
+var _queue_box: VBoxContainer
+var _build_grid: GridContainer
+var _buildings_label: Label
 var _trade_label: Label
 var _citizens_label: Label
 
@@ -44,29 +55,63 @@ func _ready() -> void:
 
 	_size_label = _add_label(box, 16, Color.WHITE)
 
-	_food_bar = ProgressBar.new()
-	_food_bar.show_percentage = false
-	_food_bar.custom_minimum_size = Vector2(0, 12)
-	var bar_bg := StyleBoxFlat.new()
-	bar_bg.bg_color = Color(0.03, 0.04, 0.06)
-	bar_bg.border_color = Color(0.3, 0.3, 0.3)
-	bar_bg.set_border_width_all(1)
-	var bar_fill := StyleBoxFlat.new()
-	bar_fill.bg_color = FOOD_COLOR
-	_food_bar.add_theme_stylebox_override("background", bar_bg)
-	_food_bar.add_theme_stylebox_override("fill", bar_fill)
-	box.add_child(_food_bar)
+	_food_bar = _add_bar(box, FOOD_COLOR)
 	_food_label = _add_label(box, 14, MUTED)
 
 	_production_label = _add_label(box, 15, Color.WHITE)
+	_build_bar = _add_bar(box, PRODUCTION_COLOR)
+	_build_label = _add_label(box, 14, MUTED)
+	_queue_box = VBoxContainer.new()
+	_queue_box.add_theme_constant_override("separation", 2)
+	box.add_child(_queue_box)
+	_add_label(box, 12, SECTION_COLOR).text = "Add to queue"
+	_build_grid = GridContainer.new()
+	_build_grid.columns = 2
+	_build_grid.add_theme_constant_override("h_separation", 4)
+	_build_grid.add_theme_constant_override("v_separation", 4)
+	box.add_child(_build_grid)
+
 	_trade_label = _add_label(box, 15, Color.WHITE)
 	_citizens_label = _add_label(box, 15, Color.WHITE)
+	_buildings_label = _add_label(box, 14, MUTED)
+	_buildings_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	var hint := _add_label(box, 12, Color(0.6, 0.62, 0.68))
 	hint.text = "Click a tile in the city radius to move a citizen there. Click a worked tile to free it."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	hide()
+
+
+func _add_bar(parent: Control, fill_color: Color) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 12)
+	var bar_bg := StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.03, 0.04, 0.06)
+	bar_bg.border_color = Color(0.3, 0.3, 0.3)
+	bar_bg.set_border_width_all(1)
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = fill_color
+	bar.add_theme_stylebox_override("background", bar_bg)
+	bar.add_theme_stylebox_override("fill", bar_fill)
+	parent.add_child(bar)
+	return bar
+
+
+func _small_button(text: String, bg: Color) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", 13)
+	var normal := UiStyle.button(bg)
+	normal.set_content_margin_all(4)
+	var hover := UiStyle.button(bg.lightened(0.15))
+	hover.set_content_margin_all(4)
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", normal)
+	return button
 
 
 func _add_label(parent: Control, font_size: int, color: Color) -> Label:
@@ -78,7 +123,10 @@ func _add_label(parent: Control, font_size: int, color: Color) -> Label:
 
 
 ## `info` keys: name, size, food_box, food_box_size, food_surplus, turns_to_grow,
-## production, production_box, trade, science, working, idle.
+## production, production_box, trade, science, science_per_turn, working, idle,
+## queue (Array of names), current_cost (0 if nothing queued),
+## turns_to_complete, blocked (reason or ""), available (Array of
+## { id, name, cost, turns }), buildings (Array of names).
 func show_city(info: Dictionary) -> void:
 	_name_label.text = info["name"]
 	_size_label.text = "Size %d" % info["size"]
@@ -100,12 +148,59 @@ func show_city(info: Dictionary) -> void:
 	_food_label.text = food
 
 	_production_label.text = "Production   %s/turn   (%d stored)" % [_signed(info["production"]), info["production_box"]]
-	_trade_label.text = "Trade   %s/turn   (science %d)" % [_signed(info["trade"]), info["science"]]
+	_show_queue(info)
+	_trade_label.text = "Trade   %s/turn   ·   science %s/turn   (total %d)" % [
+		_signed(info["trade"]), _signed(info["science_per_turn"]), info["science"]]
+	var buildings: Array = info["buildings"]
+	_buildings_label.text = "Buildings   " + (", ".join(PackedStringArray(buildings)) if not buildings.is_empty() else "none yet")
 	var citizens := "Citizens   %d working" % info["working"]
 	if int(info["idle"]) > 0:
 		citizens += ", %d idle" % info["idle"]
 	_citizens_label.text = citizens
 	show()
+
+
+func _show_queue(info: Dictionary) -> void:
+	var queue: Array = info["queue"]
+	var cost: int = info["current_cost"]
+	_build_bar.max_value = maxi(1, cost)
+	_build_bar.value = mini(int(info["production_box"]), cost) if cost > 0 else 0
+	if queue.is_empty():
+		_build_label.text = "Nothing queued: pick something to build"
+		_build_label.add_theme_color_override("font_color", WARNING_COLOR)
+	elif String(info["blocked"]) != "":
+		_build_label.text = info["blocked"]
+		_build_label.add_theme_color_override("font_color", WARNING_COLOR)
+	else:
+		var turns: int = info["turns_to_complete"]
+		if turns < 0:
+			_build_label.text = "%s: no production" % queue[0]
+			_build_label.add_theme_color_override("font_color", WARNING_COLOR)
+		else:
+			_build_label.text = "%s in %d turn%s" % [queue[0], turns, "" if turns == 1 else "s"]
+			_build_label.add_theme_color_override("font_color", MUTED)
+
+	for child in _queue_box.get_children():
+		child.queue_free()
+	for i in queue.size():
+		var entry := _small_button("%d. %s   ✕" % [i + 1, queue[i]], Color(0.2, 0.17, 0.12, 0.95))
+		entry.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		entry.tooltip_text = "Remove from queue"
+		var index := i
+		entry.pressed.connect(func() -> void: remove_requested.emit(index))
+		_queue_box.add_child(entry)
+
+	for child in _build_grid.get_children():
+		child.queue_free()
+	for item: Dictionary in info["available"]:
+		var turns: int = item["turns"]
+		var eta := "%dt" % turns if turns > 0 else "–"
+		var button := _small_button("%s  %d · %s" % [item["name"], item["cost"], eta], Color(0.12, 0.14, 0.2, 0.95))
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.tooltip_text = "Cost %d, %s at the current rate" % [item["cost"], eta]
+		var id: String = item["id"]
+		button.pressed.connect(func() -> void: enqueue_requested.emit(id))
+		_build_grid.add_child(button)
 
 
 func _signed(value: int) -> String:

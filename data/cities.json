@@ -1,6 +1,8 @@
 {
 	"version": 1,
 	"sprite": "city",
+	"citizen_sprite": "citizen",
+	"border_sprite": "border",
 	"work_radius": 2,
 	"sight_radius": 2,
 	"no_city_within": 3,

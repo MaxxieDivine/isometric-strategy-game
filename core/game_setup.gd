@@ -7,7 +7,8 @@ const START_TERRAIN: Array[String] = ["grassland", "plains"]
 const EDGE_CLEARANCE := 3
 ## Start candidates scoring within this much of the best are equally likely.
 const START_SCORE_SLACK := 2
-const PLAYER_COLOR := "#d8402f"
+## Civ (data/civs.json) the human player plays.
+const PLAYER_CIV := "player"
 const STARTING_UNITS: Array[String] = ["settler", "warrior"]
 
 
@@ -15,7 +16,8 @@ static func new_game(map_seed: int, width: int, height: int) -> GameState:
 	var state := GameState.new()
 	state.rng.seed = map_seed
 	state.map = MapGenerator.generate(width, height, map_seed)
-	var player := state.add_player("Player", PLAYER_COLOR)
+	var civ := CivDefs.get_def(PLAYER_CIV)
+	var player := state.add_player(String(civ["name"]), String(civ["color"]), PLAYER_CIV)
 	var start := find_start(state.map, state.rng)
 	for type in STARTING_UNITS:
 		state.add_unit(type, player, start)

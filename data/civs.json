@@ -1,0 +1,6 @@
+{
+	"version": 1,
+	"civs": [
+		{ "id": "player", "name": "Player", "color": "#d8402f", "border_color": "#a259e6" }
+	]
+}

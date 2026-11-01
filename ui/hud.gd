@@ -1,10 +1,12 @@
 class_name Hud
 extends Control
-## Turn/year display, End Turn and Found City buttons, key hints, and a
-## notification card for batched turn news.
+## Turn/year display, End Turn and Found City buttons, key hints, a
+## notification card for batched turn news, and the idle-city prompt.
 
 signal end_turn_requested
 signal found_city_requested
+signal end_turn_confirmed
+signal idle_city_jump_requested(city_id: int)
 
 const BUTTON_BG := Color(0.16, 0.14, 0.1, 0.95)
 const BUTTON_READY_BG := Color(0.55, 0.38, 0.1, 0.98)
@@ -21,6 +23,10 @@ var _notice_lines: Label
 var _notice_tween: Tween
 var _pulse_tween: Tween
 var _turn_done := false
+var _idle_prompt: PanelContainer
+var _idle_label: Label
+var _idle_jump_button: Button
+var _idle_city_id := -1
 
 
 func _ready() -> void:
@@ -50,6 +56,7 @@ func _ready() -> void:
 	_hint_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 
 	_build_notice()
+	_build_idle_prompt()
 
 
 ## A bottom-right button; `slot` 0 is the bottom one, higher slots stack upward.
@@ -92,6 +99,69 @@ func _build_notice() -> void:
 	box.add_child(_notice_lines)
 
 
+## A small card above the buttons: "Rome has nothing to build" with
+## [Go to Rome] and [End Turn anyway]. Not modal; the map stays usable.
+func _build_idle_prompt() -> void:
+	_idle_prompt = PanelContainer.new()
+	_idle_prompt.add_theme_stylebox_override("panel", UiStyle.panel())
+	add_child(_idle_prompt)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	_idle_prompt.add_child(box)
+	_idle_label = Label.new()
+	_idle_label.add_theme_font_size_override("font_size", 16)
+	_idle_label.add_theme_color_override("font_color", UiStyle.GOLD)
+	box.add_child(_idle_label)
+	var hint := Label.new()
+	hint.text = "End Turn again to skip"
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Color(0.6, 0.62, 0.68))
+	box.add_child(hint)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	box.add_child(row)
+	_idle_jump_button = Button.new()
+	_idle_jump_button.focus_mode = Control.FOCUS_NONE
+	_idle_jump_button.pressed.connect(func() -> void: idle_city_jump_requested.emit(_idle_city_id))
+	row.add_child(_idle_jump_button)
+	var anyway := Button.new()
+	anyway.text = "End Turn anyway"
+	anyway.focus_mode = Control.FOCUS_NONE
+	anyway.pressed.connect(func() -> void: end_turn_confirmed.emit())
+	row.add_child(anyway)
+	for button: Button in [_idle_jump_button, anyway]:
+		_set_button_bg(button, BUTTON_BG)
+	_idle_prompt.hide()
+
+
+func show_idle_prompt(city_id: int, city_name: String, other_idle: int) -> void:
+	_idle_city_id = city_id
+	_idle_label.text = "%s has nothing to build" % city_name
+	if other_idle > 0:
+		_idle_label.text += "  (+%d more)" % other_idle
+	_idle_jump_button.text = "Go to %s" % city_name
+	_idle_prompt.show()
+	_idle_prompt.reset_size()
+	_idle_prompt.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	_idle_prompt.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_idle_prompt.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	# Sit above the two button slots.
+	_idle_prompt.offset_top -= 2 * 56
+	_idle_prompt.offset_bottom -= 2 * 56
+	_idle_prompt.pivot_offset = _idle_prompt.size / 2.0
+	_idle_prompt.scale = Vector2.ONE * 0.85
+	create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT) 		.tween_property(_idle_prompt, "scale", Vector2.ONE, 0.15)
+
+
+func hide_idle_prompt() -> void:
+	_idle_prompt.hide()
+	_idle_city_id = -1
+
+
+func is_idle_prompt_visible() -> bool:
+	return _idle_prompt.visible
+
+
 func set_turn(turn: int, year_text: String) -> void:
 	_turn_label.text = "Turn %d   ·   %s" % [turn, year_text]
 
@@ -104,7 +174,7 @@ func set_found_city_visible(shown: bool) -> void:
 	_found_city_button.visible = shown
 
 
-## Highlights the End Turn button when every unit has finished.
+## Highlights the End Turn button when every unit and city has orders.
 func set_turn_done(done: bool) -> void:
 	if done == _turn_done:
 		return
