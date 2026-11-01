@@ -37,6 +37,11 @@ Weigh every feature, system, and UI change against these. If a change works agai
 - Save format: JSON (human-readable, diffable), including a `version` field so old saves can be migrated.
 - `saves/` should be listed in `.gitignore`.
 
+## Art and placeholders
+- Data definitions (units, and later cities and yields) reference art by a `sprite` key, never by file path.
+- `view/sprite_library.gd` resolves a key to `res://assets/sprites/<key>.png`. When no file exists, the view draws a code-generated placeholder from `view/placeholder_art.gd`. To add real art, drop in the PNG; no code changes needed.
+- All placeholder drawing stays in the view layer.
+
 ## Isometric conventions
 - Map data uses logical grid coordinates (`Vector2i`). Isometric projection (grid to screen and back) happens only in the view layer, in one place.
 - Logic code never deals with pixel or screen coordinates.
@@ -61,3 +66,6 @@ tests/      # headless tests for core/
 ## Testing
 - `core/` logic must be testable headless (`godot --headless`). When adding rules, add or update tests that run turn processing on plain data with no scenes.
 - Check save/load round-trips: `from_dict(to_dict(state))` should give an identical state.
+- Each `tests/test_*.gd` is a standalone `SceneTree` script. It exits with code 1 on failure. Run each one:
+  `godot --headless --path . --script res://tests/test_units.gd`
+- After adding new `class_name` scripts, run `godot --headless --path . --import` once (or open the editor) so the global class cache knows about them.

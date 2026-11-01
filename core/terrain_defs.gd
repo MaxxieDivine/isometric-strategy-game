@@ -6,27 +6,32 @@ extends RefCounted
 const PATH := "res://data/terrain.json"
 
 static var _defs: Array[Dictionary] = []
+static var _by_id: Dictionary = {}
 
 
 static func all() -> Array[Dictionary]:
 	if _defs.is_empty():
-		_load()
+		_defs = DataLoader.load_list(PATH, "terrain")
+		for def in _defs:
+			_by_id[def["id"]] = def
 	return _defs
 
 
 static func get_def(id: String) -> Dictionary:
-	for def in all():
-		if def["id"] == id:
-			return def
-	push_error("Unknown terrain id: %s" % id)
-	return {}
+	all()
+	if not _by_id.has(id):
+		push_error("Unknown terrain id: %s" % id)
+		return {}
+	return _by_id[id]
 
 
-static func _load() -> void:
-	var text := FileAccess.get_file_as_string(PATH)
-	var parsed: Variant = JSON.parse_string(text)
-	if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("terrain"):
-		push_error("Failed to parse %s" % PATH)
-		return
-	for entry: Variant in parsed["terrain"]:
-		_defs.append(entry as Dictionary)
+static func move_cost(id: String) -> int:
+	return int(get_def(id).get("move_cost", 1))
+
+
+static func passable_by_land(id: String) -> bool:
+	return bool(get_def(id).get("passable_by_land", true))
+
+
+static func sight_bonus(id: String) -> int:
+	return int(get_def(id).get("sight_bonus", 0))

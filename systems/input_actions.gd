@@ -8,6 +8,9 @@ const DEFAULT_KEYS := {
 	"pan_right": [KEY_D, KEY_RIGHT],
 	"pan_up": [KEY_W, KEY_UP],
 	"pan_down": [KEY_S, KEY_DOWN],
+	"end_turn": [KEY_ENTER, KEY_KP_ENTER],
+	"skip_unit": [KEY_SPACE],
+	"deselect": [KEY_ESCAPE],
 	"regenerate_map": [KEY_R],
 }
 

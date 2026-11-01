@@ -2,9 +2,13 @@
 
 [ext_resource type="Script" path="res://systems/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://view/map_view.gd" id="2_map_view"]
-[ext_resource type="Script" path="res://view/tile_highlight.gd" id="3_highlight"]
-[ext_resource type="Script" path="res://view/map_camera.gd" id="4_camera"]
-[ext_resource type="Script" path="res://ui/tile_info_panel.gd" id="5_tile_info"]
+[ext_resource type="Script" path="res://view/fog_view.gd" id="3_fog_view"]
+[ext_resource type="Script" path="res://view/path_overlay.gd" id="4_path_overlay"]
+[ext_resource type="Script" path="res://view/tile_highlight.gd" id="5_highlight"]
+[ext_resource type="Script" path="res://view/units_layer.gd" id="6_units_layer"]
+[ext_resource type="Script" path="res://view/map_camera.gd" id="7_camera"]
+[ext_resource type="Script" path="res://ui/hud.gd" id="8_hud"]
+[ext_resource type="Script" path="res://ui/tile_info_panel.gd" id="9_tile_info"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -12,27 +16,34 @@ script = ExtResource("1_main")
 [node name="MapView" type="TileMapLayer" parent="."]
 script = ExtResource("2_map_view")
 
+[node name="FogView" type="TileMapLayer" parent="."]
+script = ExtResource("3_fog_view")
+
+[node name="PathOverlay" type="Node2D" parent="."]
+script = ExtResource("4_path_overlay")
+
 [node name="TileHighlight" type="Node2D" parent="."]
-script = ExtResource("3_highlight")
+script = ExtResource("5_highlight")
+
+[node name="UnitsLayer" type="Node2D" parent="."]
+script = ExtResource("6_units_layer")
 
 [node name="MapCamera" type="Camera2D" parent="."]
-script = ExtResource("4_camera")
+script = ExtResource("7_camera")
 
 [node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Hud" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("8_hud")
 
 [node name="TileInfoPanel" type="PanelContainer" parent="UI"]
 offset_left = 12.0
 offset_top = 12.0
-script = ExtResource("5_tile_info")
-
-[node name="SeedLabel" type="Label" parent="UI"]
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 12.0
-offset_top = -36.0
-offset_right = 420.0
-offset_bottom = -12.0
-grow_vertical = 0
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 4
+script = ExtResource("9_tile_info")

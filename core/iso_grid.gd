@@ -22,6 +22,23 @@ static func neighbors(cell: Vector2i, width: int, height: int) -> Array[Vector2i
 	return result
 
 
+## Number of single steps (to any of the 8 neighbors) between two cells.
+static func step_distance(a: Vector2i, b: Vector2i) -> int:
+	var da := _diamond(b) - _diamond(a)
+	return maxi(absi(da.x), absi(da.y))
+
+
+## All in-bounds cells within `radius` steps of `center` (including it).
+static func cells_within(center: Vector2i, radius: int, width: int, height: int) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for y in range(maxi(0, center.y - 2 * radius), mini(height, center.y + 2 * radius + 1)):
+		for x in range(maxi(0, center.x - radius - 1), mini(width, center.x + radius + 2)):
+			var cell := Vector2i(x, y)
+			if step_distance(center, cell) <= radius:
+				result.append(cell)
+	return result
+
+
 ## Position of a cell's center on the undistorted ground plane, in tile units.
 ## Use this for distances and noise sampling so shapes aren't squashed.
 static func ground_position(cell: Vector2i) -> Vector2:
@@ -37,6 +54,12 @@ static func index_of(cell: Vector2i, width: int) -> int:
 	return cell.y * width + cell.x
 
 
-@warning_ignore("integer_division")
 static func cell_of(index: int, width: int) -> Vector2i:
+	@warning_ignore("integer_division")
 	return Vector2i(index % width, index / width)
+
+
+## Diamond-axis coordinates: each step changes u and/or v by at most 1,
+## so step distance is the Chebyshev distance in (u, v). Valid for y >= 0.
+static func _diamond(cell: Vector2i) -> Vector2i:
+	return Vector2i(cell.x + ((cell.y + 1) >> 1), cell.x - (cell.y >> 1))

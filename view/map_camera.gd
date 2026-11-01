@@ -13,6 +13,9 @@ const MAX_ZOOM := 2.0
 ## Zoom-out stops once the whole map fits, but never below this.
 const MIN_ZOOM_FLOOR := 0.2
 const ZOOM_SMOOTHING := 14.0
+## ensure_visible() moves the camera when a point is within this fraction of the edge.
+const FOLLOW_MARGIN := 0.2
+const GLIDE_TIME := 0.3
 
 var _bounds := Rect2()
 var _min_zoom := MIN_ZOOM_FLOOR
@@ -20,6 +23,7 @@ var _target_zoom := 1.0
 ## Viewport position the current zoom is anchored to (the cursor when zooming).
 var _zoom_anchor := Vector2.ZERO
 var _mouse_in_window := false
+var _glide: Tween
 
 
 func _ready() -> void:
@@ -38,10 +42,27 @@ func set_bounds(bounds: Rect2) -> void:
 
 
 func look_at_world(world_pos: Vector2, new_zoom: float = 1.0) -> void:
+	_stop_glide()
 	_target_zoom = clampf(new_zoom, _min_zoom, MAX_ZOOM)
 	zoom = Vector2.ONE * _target_zoom
 	position = world_pos
 	_clamp_position()
+
+
+## Glides to `world_pos` if it's outside the central part of the view.
+func ensure_visible(world_pos: Vector2) -> void:
+	var half_view := get_viewport_rect().size / 2.0 / zoom.x * (1.0 - FOLLOW_MARGIN)
+	if Rect2(position - half_view, half_view * 2.0).has_point(world_pos):
+		return
+	_stop_glide()
+	_glide = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_glide.tween_property(self, "position", _clamped(world_pos), GLIDE_TIME)
+
+
+func _stop_glide() -> void:
+	if _glide != null:
+		_glide.kill()
+		_glide = null
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -58,7 +79,8 @@ func _process(delta: float) -> void:
 	var direction := Input.get_vector("pan_left", "pan_right", "pan_up", "pan_down")
 	direction += _edge_pan_direction()
 	if direction != Vector2.ZERO:
-		position += direction.limit_length(1.0) * PAN_SPEED * delta / zoom.x
+		_stop_glide()
+		position +=direction.limit_length(1.0) * PAN_SPEED * delta / zoom.x
 
 	if not is_equal_approx(zoom.x, _target_zoom):
 		var anchor_before := _viewport_to_world(_zoom_anchor)
@@ -108,16 +130,21 @@ func _update_min_zoom() -> void:
 
 
 func _clamp_position() -> void:
+	position = _clamped(position)
+
+
+func _clamped(pos: Vector2) -> Vector2:
 	if _bounds.size == Vector2.ZERO:
-		return
+		return pos
 	var half_view := get_viewport_rect().size / 2.0 / zoom.x
 	for axis in 2:
 		if half_view[axis] * 2.0 >= _bounds.size[axis]:
-			position[axis] = _bounds.get_center()[axis]
+			pos[axis] = _bounds.get_center()[axis]
 		else:
-			position[axis] = clampf(position[axis],
+			pos[axis] = clampf(pos[axis],
 				_bounds.position[axis] + half_view[axis],
 				_bounds.end[axis] - half_view[axis])
+	return pos
 
 
 func _on_viewport_resized() -> void:
