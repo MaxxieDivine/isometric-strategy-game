@@ -1,10 +1,10 @@
 {
 	"version": 1,
 	"terrain": [
-		{ "id": "grassland", "name": "Grassland", "symbol": "G", "placeholder_color": "#4f9e3a" },
-		{ "id": "plains",    "name": "Plains",    "symbol": "P", "placeholder_color": "#c2b04a" },
-		{ "id": "hills",     "name": "Hills",     "symbol": "H", "placeholder_color": "#8c6a3e" },
-		{ "id": "forest",    "name": "Forest",    "symbol": "F", "placeholder_color": "#2a5e2c" },
-		{ "id": "ocean",     "name": "Ocean",     "symbol": "O", "placeholder_color": "#2f5fa8" }
+		{ "id": "grassland", "name": "Grassland", "placeholder_color": "#4f9e3a" },
+		{ "id": "plains",    "name": "Plains",    "placeholder_color": "#c2b04a" },
+		{ "id": "hills",     "name": "Hills",     "placeholder_color": "#8c6a3e" },
+		{ "id": "forest",    "name": "Forest",    "placeholder_color": "#2a5e2c" },
+		{ "id": "ocean",     "name": "Ocean",     "placeholder_color": "#2f5fa8" }
 	]
 }

@@ -22,14 +22,6 @@ static func get_def(id: String) -> Dictionary:
 	return {}
 
 
-static func id_for_symbol(symbol: String) -> String:
-	for def in all():
-		if def["symbol"] == symbol:
-			return def["id"]
-	push_error("Unknown terrain symbol: %s" % symbol)
-	return ""
-
-
 static func _load() -> void:
 	var text := FileAccess.get_file_as_string(PATH)
 	var parsed: Variant = JSON.parse_string(text)

@@ -1,7 +1,7 @@
 class_name MapView
 extends TileMapLayer
 ## Renders a MapState. Reads state only; never modifies it.
-## The single place where grid coordinates become screen positions.
+## The single place where grid coordinates become world (canvas) positions.
 
 var _atlas_by_id: Dictionary = {}
 
@@ -26,21 +26,21 @@ func render(map: MapState) -> void:
 				set_cell(cell, TerrainTilesetBuilder.SOURCE_ID, _atlas_by_id[id])
 
 
-func grid_to_screen(cell: Vector2i) -> Vector2:
+func grid_to_world(cell: Vector2i) -> Vector2:
 	return to_global(map_to_local(cell))
 
 
-func screen_to_grid(screen_pos: Vector2) -> Vector2i:
-	return local_to_map(to_local(screen_pos))
+func world_to_grid(world_pos: Vector2) -> Vector2i:
+	return local_to_map(to_local(world_pos))
 
 
-## Bounding rectangle of all drawn tiles, in this layer's local space.
-func get_map_pixel_rect() -> Rect2:
+## Bounding rectangle of all drawn tiles, in world space.
+func get_map_world_rect() -> Rect2:
 	var cells := get_used_cells()
 	if cells.is_empty():
 		return Rect2()
 	var half := Vector2(TerrainTilesetBuilder.TILE_SIZE) / 2.0
-	var rect := Rect2(map_to_local(cells[0]) - half, half * 2.0)
+	var rect := Rect2(grid_to_world(cells[0]) - half, half * 2.0)
 	for cell in cells:
-		rect = rect.merge(Rect2(map_to_local(cell) - half, half * 2.0))
+		rect = rect.merge(Rect2(grid_to_world(cell) - half, half * 2.0))
 	return rect
