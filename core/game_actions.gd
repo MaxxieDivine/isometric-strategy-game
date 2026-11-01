@@ -8,7 +8,14 @@ extends RefCounted
 ##   move_failed      { unit_id, goal }
 ##   orders_cancelled { unit_id }
 ##   unit_skipped     { unit_id }
-##   turn_started     { turn }
+##   unit_removed     { unit_id }
+##   found_failed     { unit_id, reason }
+##   city_founded     { city_id }
+##   city_tiles_changed { city_id }
+##   city_grew        { city_id, size }
+##   city_shrank      { city_id, size }
+##   city_starving    { city_id }
+##   turn_started     { turn }   (city events of the new turn follow it)
 
 
 ## Orders a unit to go to `goal`. It moves as far as it can now and keeps
@@ -41,13 +48,44 @@ static func skip_unit(state: GameState, unit_id: int) -> Array[Dictionary]:
 	return events
 
 
-## Starts the next turn: restores moves, then units with orders keep moving.
+## The settler founds a city where it stands and is consumed.
+static func found_city(state: GameState, unit_id: int) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	var unit := state.get_unit(unit_id)
+	if unit == null:
+		return events
+	var reason := CityRules.can_found(state, unit)
+	if reason != "":
+		events.append({ "type": "found_failed", "unit_id": unit_id, "reason": reason })
+		return events
+	var city := state.add_city(unit.owner, unit.position)
+	state.remove_unit(unit_id)
+	Fog.reveal_radius(state, city.owner, city.position, CityRules.sight_radius())
+	CityRules.auto_assign(state, city)
+	events.append({ "type": "unit_removed", "unit_id": unit_id })
+	events.append({ "type": "city_founded", "city_id": city.id })
+	return events
+
+
+## Moves a citizen onto `cell`, or frees the citizen already working it.
+static func toggle_worked_tile(state: GameState, city_id: int, cell: Vector2i) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	var city := state.get_city(city_id)
+	if city != null and CityRules.toggle_worked_tile(state, city, cell):
+		events.append({ "type": "city_tiles_changed", "city_id": city_id })
+	return events
+
+
+## Starts the next turn: cities grow and bank yields, units get their moves
+## back, then units with orders keep moving.
 static func end_turn(state: GameState) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	state.turn += 1
+	events.append({ "type": "turn_started", "turn": state.turn })
+	for city in state.cities:
+		events.append_array(CityRules.process_turn(state, city))
 	for unit in state.units:
 		unit.moves_left = unit.max_moves()
-	events.append({ "type": "turn_started", "turn": state.turn })
 	for unit in state.units:
 		if unit.has_goal():
 			events.append_array(_advance(state, unit))

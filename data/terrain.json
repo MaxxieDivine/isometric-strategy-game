@@ -1,10 +1,10 @@
 {
 	"version": 1,
 	"terrain": [
-		{ "id": "grassland", "name": "Grassland", "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#4f9e3a" },
-		{ "id": "plains",    "name": "Plains",    "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#c2b04a" },
-		{ "id": "hills",     "name": "Hills",     "move_cost": 2, "passable_by_land": true,  "sight_bonus": 1, "placeholder_color": "#8c6a3e" },
-		{ "id": "forest",    "name": "Forest",    "move_cost": 2, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#2a5e2c" },
-		{ "id": "ocean",     "name": "Ocean",     "move_cost": 1, "passable_by_land": false, "sight_bonus": 0, "placeholder_color": "#2f5fa8" }
+		{ "id": "grassland", "name": "Grassland", "food": 2, "production": 0, "trade": 0, "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#4f9e3a" },
+		{ "id": "plains",    "name": "Plains",    "food": 1, "production": 1, "trade": 0, "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#c2b04a" },
+		{ "id": "hills",     "name": "Hills",     "food": 1, "production": 0, "trade": 0, "move_cost": 2, "passable_by_land": true,  "sight_bonus": 1, "placeholder_color": "#8c6a3e" },
+		{ "id": "forest",    "name": "Forest",    "food": 1, "production": 2, "trade": 0, "move_cost": 2, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#2a5e2c" },
+		{ "id": "ocean",     "name": "Ocean",     "food": 1, "production": 0, "trade": 2, "move_cost": 1, "passable_by_land": false, "sight_bonus": 0, "placeholder_color": "#2f5fa8" }
 	]
 }

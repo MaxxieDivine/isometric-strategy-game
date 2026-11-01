@@ -10,6 +10,7 @@ const DEFAULT_KEYS := {
 	"pan_down": [KEY_S, KEY_DOWN],
 	"end_turn": [KEY_ENTER, KEY_KP_ENTER],
 	"skip_unit": [KEY_SPACE],
+	"found_city": [KEY_B],
 	"deselect": [KEY_ESCAPE],
 	"regenerate_map": [KEY_R],
 }

@@ -1,0 +1,8 @@
+{
+	"version": 1,
+	"yields": [
+		{ "id": "food",       "name": "Food",       "sprite": "yield_food",       "placeholder_color": "#7bd04f", "placeholder_shape": "circle" },
+		{ "id": "production", "name": "Production", "sprite": "yield_production", "placeholder_color": "#d9813a", "placeholder_shape": "square" },
+		{ "id": "trade",      "name": "Trade",      "sprite": "yield_trade",      "placeholder_color": "#f2d74e", "placeholder_shape": "diamond" }
+	]
+}

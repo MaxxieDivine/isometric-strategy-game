@@ -28,5 +28,9 @@ static func max_moves(id: String) -> int:
 	return int(get_def(id).get("moves", 1))
 
 
+static func can_found_city(id: String) -> bool:
+	return bool(get_def(id).get("can_found_city", false))
+
+
 static func domain(id: String) -> String:
 	return String(get_def(id).get("domain", "land"))

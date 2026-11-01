@@ -1,0 +1,11 @@
+{
+	"version": 1,
+	"sprite": "city",
+	"work_radius": 2,
+	"sight_radius": 2,
+	"no_city_within": 3,
+	"food_per_citizen": 2,
+	"food_box_per_size": 10,
+	"auto_assign_food_target": 2,
+	"center_bonus": { "food": 0, "production": 1, "trade": 1 }
+}

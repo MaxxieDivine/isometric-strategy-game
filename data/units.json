@@ -1,7 +1,7 @@
 {
 	"version": 1,
 	"units": [
-		{ "id": "settler", "name": "Settler", "domain": "land", "moves": 1, "attack": 0, "defense": 1, "sprite": "unit_settler" },
-		{ "id": "warrior", "name": "Warrior", "domain": "land", "moves": 1, "attack": 1, "defense": 1, "sprite": "unit_warrior" }
+		{ "id": "settler", "name": "Settler", "domain": "land", "moves": 1, "attack": 0, "defense": 1, "can_found_city": true,  "sprite": "unit_settler" },
+		{ "id": "warrior", "name": "Warrior", "domain": "land", "moves": 1, "attack": 1, "defense": 1, "can_found_city": false, "sprite": "unit_warrior" }
 	]
 }

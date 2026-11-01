@@ -10,12 +10,17 @@ static func sight_radius(map: MapState, cell: Vector2i) -> int:
 	return BASE_SIGHT + TerrainDefs.sight_bonus(map.get_terrain(cell))
 
 
-## Marks tiles around `cell` explored for `owner`. Returns how many were new.
+## Marks tiles a unit on `cell` can see as explored. Returns how many were new.
 static func reveal_around(state: GameState, owner: int, cell: Vector2i) -> int:
+	return reveal_radius(state, owner, cell, sight_radius(state.map, cell))
+
+
+## Marks tiles within `radius` of `center` explored for `owner`. Returns how many were new.
+static func reveal_radius(state: GameState, owner: int, center: Vector2i, radius: int) -> int:
 	var map := state.map
 	var tiles := state.explored[owner]
 	var newly_explored := 0
-	for c in IsoGrid.cells_within(cell, sight_radius(map, cell), map.width, map.height):
+	for c in IsoGrid.cells_within(center, radius, map.width, map.height):
 		var i := IsoGrid.index_of(c, map.width)
 		if tiles[i] == 0:
 			tiles[i] = 1
@@ -30,12 +35,18 @@ static func reveal_for_units(state: GameState, owner: int) -> void:
 		reveal_around(state, owner, unit.position)
 
 
-## Tiles `owner`'s units can see right now (1 = visible). Derived, not saved.
+## Tiles `owner`'s units and cities can see right now (1 = visible). Derived, not saved.
 static func compute_visible(state: GameState, owner: int) -> PackedByteArray:
 	var map := state.map
 	var visible := PackedByteArray()
 	visible.resize(map.width * map.height)
 	for unit in state.units_of(owner):
-		for c in IsoGrid.cells_within(unit.position, sight_radius(map, unit.position), map.width, map.height):
-			visible[IsoGrid.index_of(c, map.width)] = 1
+		_mark(visible, map, unit.position, sight_radius(map, unit.position))
+	for city in state.cities_of(owner):
+		_mark(visible, map, city.position, CityRules.sight_radius())
 	return visible
+
+
+static func _mark(visible: PackedByteArray, map: MapState, center: Vector2i, radius: int) -> void:
+	for c in IsoGrid.cells_within(center, radius, map.width, map.height):
+		visible[IsoGrid.index_of(c, map.width)] = 1
