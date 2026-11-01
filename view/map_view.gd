@@ -7,6 +7,8 @@ var _atlas_by_id: Dictionary = {}
 
 
 func _ready() -> void:
+	# Crisp pixel art at any zoom (also the project default; explicit here).
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	# Built up front: grid/world conversions need the tile set before any render.
 	_ensure_tile_set()
 
