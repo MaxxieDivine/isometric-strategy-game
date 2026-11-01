@@ -66,6 +66,6 @@ tests/      # headless tests for core/
 ## Testing
 - `core/` logic must be testable headless (`godot --headless`). When adding rules, add or update tests that run turn processing on plain data with no scenes.
 - Check save/load round-trips: `from_dict(to_dict(state))` should give an identical state.
-- Each `tests/test_*.gd` is a standalone `SceneTree` script. It exits with code 1 on failure. Run each one:
-  `godot --headless --path . --script res://tests/test_units.gd`
-- After adding new `class_name` scripts, run `godot --headless --path . --import` once (or open the editor) so the global class cache knows about them.
+- Run all tests with `.\tools\run_tests.ps1`, or a subset with `.\tools\run_tests.ps1 cities`. It reimports first, which refreshes the global class cache after new `class_name` scripts, then runs every suite and exits 1 on any failure.
+- Each `tests/test_*.gd` is a standalone `SceneTree` script that exits with code 1 on failure. A single suite can also be run directly:
+  `D:\Tools\Godot\Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tests/test_units.gd`
