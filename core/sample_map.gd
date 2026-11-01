@@ -1,0 +1,22 @@
+class_name SampleMap
+extends RefCounted
+## Hand-authored 20×12 test map. Symbols are defined in data/terrain.json.
+
+const ROWS := [
+	"OOOOOOOOOOOOOOOOOOOO",
+	"OOOGGGPPOOOOOGGPOOOO",
+	"OOGGFFPPPOOOGGHHPOOO",
+	"OGGFFFHPPPOGGGHHPPOO",
+	"OGGFFHHHPPGGFFHPPPOO",
+	"OOGGGHHPPPGFFFPPGOOO",
+	"OOOGGPPPGGGFFPPGGOOO",
+	"OOPPGGGHHGGGPPGGFOOO",
+	"OOPPPGHHHFFGGPPFFOOO",
+	"OOOPPGGHFFFGGGPPOOOO",
+	"OOOOPPGGGFFOOGGOOOOO",
+	"OOOOOOOOOOOOOOOOOOOO",
+]
+
+
+static func create() -> MapState:
+	return MapState.from_rows(ROWS)
