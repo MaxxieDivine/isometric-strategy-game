@@ -34,7 +34,10 @@ Weigh every feature, system, and UI change against these. If a change works agai
   - In the editor or a debug run: `ProjectSettings.globalize_path("res://saves")`.
   - In exported builds `res://` is read-only, so use `OS.get_executable_path().get_base_dir().path_join("saves")`.
   - Wrap this in a single helper (e.g. `SaveSystem.get_save_dir()`) and create the folder with `DirAccess.make_dir_recursive_absolute` if it is missing.
+  - **Web builds are the one exception**: a web page can only write to browser storage, so `SaveSystem.get_save_dir()` uses `user://saves` there (kept per browser and per site).
 - Save format: JSON (human-readable, diffable), including a `version` field so old saves can be migrated.
+- `systems/save_system.gd` (`SaveSystem`) does all save I/O. Loading validates the file and returns null for a broken, incomplete or newer-version save, so the game starts fresh instead of crashing.
+- The game autosaves to `autosave.json` after every turn, on a new game, and when the app loses focus or closes, and continues the autosave on launch.
 - `saves/` should be listed in `.gitignore`.
 
 ## Art and placeholders
