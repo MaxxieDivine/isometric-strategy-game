@@ -31,6 +31,12 @@ extends RefCounted
 ##   barbarian_spawned { unit_id, camp_id }
 ##   barbarians_spotted { player, unit_id, cell, city_id }
 ##   city_sacked      { city_id, unit_id, size, production_lost }
+##   wonder_built     { city_id, item, wonder, player, turn }   (instead of city_built)
+##   wonder_lost      { city_id, wonder, by_player, by_city_id, kept }   (completed
+##                    elsewhere; the city keeps `kept` stored production)
+##   turns_remaining  { turns }   (countdown milestones near the turn limit)
+##   game_over        { reason, winner }   (see Victory)
+##   game_continued   {}   (Keep Playing)
 ##   turn_started     { turn }   (the rest of the turn's events follow it)
 
 
@@ -53,6 +59,7 @@ static func move_unit(state: GameState, unit_id: int, goal: Vector2i) -> Array[D
 	unit.path = path
 	events.append_array(_advance(state, unit))
 	events.append_array(_sightings(state))
+	Chronicle.record(state, events)
 	return events
 
 
@@ -97,6 +104,7 @@ static func found_city(state: GameState, unit_id: int) -> Array[Dictionary]:
 	events.append({ "type": "unit_removed", "unit_id": unit_id })
 	events.append({ "type": "city_founded", "city_id": city.id })
 	events.append_array(_sightings(state))
+	Chronicle.record(state, events)
 	return events
 
 
@@ -162,7 +170,8 @@ static func auto_pick_research(state: GameState, player_id: int) -> Array[Dictio
 
 ## Starts the next turn: undecided players get research auto-picked, cities
 ## grow and bank yields and science, discoveries are made, units get their
-## moves back, then units with orders keep moving.
+## moves back, then units with orders keep moving. Finally the score is
+## recorded and the game may end (turn limit or Wonder Victory).
 static func end_turn(state: GameState) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	state.turn += 1
@@ -184,6 +193,18 @@ static func end_turn(state: GameState) -> Array[Dictionary]:
 		if unit.has_goal():
 			events.append_array(_advance(state, unit))
 	events.append_array(_sightings(state))
+	Score.record(state)
+	events.append_array(Victory.check(state))
+	Chronicle.record(state, events)
+	return events
+
+
+## After the game has ended: keep playing with the score frozen.
+static func keep_playing(state: GameState) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	if Victory.is_over(state) and not Victory.is_continued(state):
+		Victory.continue_game(state)
+		events.append({ "type": "game_continued" })
 	return events
 
 

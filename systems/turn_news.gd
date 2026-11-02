@@ -8,13 +8,16 @@ const NEAR_CITY := 4
 
 
 ## Returns { lines, highlights, warnings: PackedStringArray, jump: Vector2i
-## (a place worth looking at, or (-1, -1)), discovered: bool }.
+## (a place worth looking at, or (-1, -1)), discovered: bool, wonders: Array
+## (the viewer's wonder_built events, for the celebration card), game_over: bool }.
 static func describe(state: GameState, events: Array[Dictionary], viewer: int) -> Dictionary:
 	var lines := PackedStringArray()
 	var highlights := PackedStringArray()
 	var warnings := PackedStringArray()
 	var jump := Vector2i(-1, -1)
 	var discovered := false
+	var wonders: Array = []
+	var game_over := false
 	var spotted_places := {}
 	for event in events:
 		match event["type"]:
@@ -26,6 +29,33 @@ static func describe(state: GameState, events: Array[Dictionary], viewer: int) -
 				lines.append("%s is starving" % _city_name(state, event["city_id"]))
 			"city_built":
 				lines.append("%s built %s" % [_city_name(state, event["city_id"]), Production.news_name(event["item"])])
+			"wonder_built":
+				var city_name := _city_name(state, event["city_id"])
+				var wonder_name := WonderDefs.display_name(event["wonder"])
+				if int(event["player"]) == viewer:
+					highlights.append("%s completed the %s!" % [city_name, wonder_name])
+					wonders.append(event)
+				else:
+					lines.append("The %s completed the %s in %s" % [
+						_owner_adjective(state, event["player"]), wonder_name, city_name])
+			"wonder_lost":
+				var city := state.get_city(event["city_id"])
+				if city != null and city.owner == viewer:
+					var by := "by the %s" % _owner_adjective(state, event["by_player"])
+					if int(event["by_player"]) == viewer:
+						by = "in %s" % _city_name(state, event["by_city_id"])
+					warnings.append("The %s was completed %s: %s keeps its %d stored production" % [
+						WonderDefs.display_name(event["wonder"]), by, city.name, event["kept"]])
+					if jump == Vector2i(-1, -1):
+						jump = city.position
+			"turns_remaining":
+				var left := int(event["turns"])
+				if left == 1:
+					warnings.append("Final turn of the age: the game ends when you end this turn")
+				else:
+					lines.append("%d turns remain in this age" % left)
+			"game_over":
+				game_over = true
 			"city_idle":
 				lines.append("%s has nothing to build" % _city_name(state, event["city_id"]))
 			"research_set":
@@ -71,7 +101,8 @@ static func describe(state: GameState, events: Array[Dictionary], viewer: int) -
 						loss = "loses %d stored production" % event["production_lost"]
 					warnings.append("Barbarians sacked %s! It is size %d and %s" % [city.name, event["size"], loss])
 					jump = city.position
-	return { "lines": lines, "highlights": highlights, "warnings": warnings, "jump": jump, "discovered": discovered }
+	return { "lines": lines, "highlights": highlights, "warnings": warnings, "jump": jump, "discovered": discovered,
+		"wonders": wonders, "game_over": game_over }
 
 
 static func _combat_text(state: GameState, event: Dictionary, viewer: int) -> String:

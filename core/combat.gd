@@ -4,7 +4,8 @@ extends RefCounted
 ## A / (A + D) and the loser of the round takes 1 damage, until one side
 ## reaches 0 HP and is destroyed. Defense is multiplied by terrain
 ## (terrain.json), fortification (combat.json) and City Walls vs land units
-## (buildings.json). All randomness comes from GameState.rng.
+## (buildings.json, or the Great Wall vs barbarians; see Effects). All
+## randomness comes from GameState.rng.
 
 const PATH := "res://data/combat.json"
 
@@ -50,15 +51,17 @@ static func attack_strength(unit: UnitState) -> float:
 	return float(UnitDefs.get_def(unit.type).get("attack", 0))
 
 
-## Defense of `defender` where it stands, against a unit of `attacker_type`.
-static func defense_strength(state: GameState, defender: UnitState, attacker_type: String) -> float:
+## Defense of `defender` where it stands, against a unit of `attacker_type`
+## owned by `attacker_owner` (-1 = unknown; the Great Wall only counts
+## against barbarians).
+static func defense_strength(state: GameState, defender: UnitState, attacker_type: String, attacker_owner: int = -1) -> float:
 	var strength := float(UnitDefs.get_def(defender.type).get("defense", 0))
 	strength *= 1.0 + TerrainDefs.defense_percent(state.map.get_terrain(defender.position)) / 100.0
 	if defender.fortified:
 		strength *= 1.0 + fortified_percent() / 100.0
 	var city := state.city_at(defender.position)
 	if city != null and city.owner == defender.owner and UnitDefs.domain(attacker_type) == "land":
-		strength *= 1.0 + BuildingDefs.effect(city, "defense_percent") / 100.0
+		strength *= 1.0 + Effects.defense_percent(state, city, attacker_owner) / 100.0
 	return strength
 
 
@@ -68,7 +71,7 @@ static func best_defender(state: GameState, cell: Vector2i, attacker: UnitState)
 	var best: UnitState = null
 	var best_score := -1.0
 	for unit in state.enemy_units_at(cell, attacker.owner):
-		var score := defense_strength(state, unit, attacker.type) * unit.hp
+		var score := defense_strength(state, unit, attacker.type, attacker.owner) * unit.hp
 		if score > best_score:
 			best = unit
 			best_score = score
@@ -110,7 +113,7 @@ static func odds(attack: float, defense: float, attacker_hp: int, defender_hp: i
 
 
 static func win_odds(state: GameState, attacker: UnitState, defender: UnitState) -> float:
-	return odds(attack_strength(attacker), defense_strength(state, defender, attacker.type), attacker.hp, defender.hp)
+	return odds(attack_strength(attacker), defense_strength(state, defender, attacker.type, attacker.owner), attacker.hp, defender.hp)
 
 
 # --- Resolution -----------------------------------------------------------------
@@ -122,7 +125,7 @@ static func win_odds(state: GameState, attacker: UnitState, defender: UnitState)
 ##   attacker_hp, defender_hp (after), attacker_start_hp, defender_start_hp, odds }
 static func resolve(state: GameState, attacker: UnitState, defender: UnitState) -> Dictionary:
 	var a := attack_strength(attacker)
-	var d := defense_strength(state, defender, attacker.type)
+	var d := defense_strength(state, defender, attacker.type, attacker.owner)
 	var event := {
 		"type": "combat",
 		"attacker_id": attacker.id, "defender_id": defender.id,

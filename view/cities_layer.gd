@@ -25,10 +25,24 @@ func sync(state: GameState, map_view: MapView) -> void:
 			_views[city.id] = view
 		view.set_city_size(city.size)
 		view.set_buildings(_building_entries(city))
+		view.set_wonders(_wonder_entries(state, city))
 	for id: int in _views.keys():
 		if not alive.has(id):
 			(_views[id] as CityView).queue_free()
 			_views.erase(id)
+
+
+func _wonder_entries(state: GameState, city: CityState) -> Array[Dictionary]:
+	var entries: Array[Dictionary] = []
+	for id in Wonders.in_city(state, city):
+		var def := WonderDefs.get_def(id)
+		entries.append({
+			"id": id,
+			"sprite": String(def.get("sprite", "")),
+			"color": Color.html(String(def.get("placeholder_color", "#cccccc"))),
+			"letter": String(def.get("letter", "?")),
+		})
+	return entries
 
 
 func _building_entries(city: CityState) -> Array[Dictionary]:

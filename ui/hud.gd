@@ -28,6 +28,10 @@ const ODDS_GOOD := Color("#9be06b")
 const ODDS_BAD := Color("#ff7a5c")
 
 var _turn_label: Label
+var _countdown_label: Label
+var _score_panel: PanelContainer
+var _score_label: Label
+var _shown_score := -1
 var _end_turn_button: Button
 var _found_city_button: Button
 var _fortify_button: Button
@@ -60,6 +64,7 @@ func _ready() -> void:
 	var top_bar := HBoxContainer.new()
 	top_bar.add_theme_constant_override("separation", 6)
 	add_child(top_bar)
+	_build_score_indicator(top_bar)
 	_build_research_indicator(top_bar)
 	var tree_button := Button.new()
 	tree_button.text = "Techs (T)"
@@ -73,9 +78,18 @@ func _ready() -> void:
 	top_bar.add_child(turn_panel)
 	top_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
 	top_bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	var turn_box := VBoxContainer.new()
+	turn_box.add_theme_constant_override("separation", 0)
+	turn_panel.add_child(turn_box)
 	_turn_label = Label.new()
 	_turn_label.add_theme_font_size_override("font_size", 18)
-	turn_panel.add_child(_turn_label)
+	turn_box.add_child(_turn_label)
+	_countdown_label = Label.new()
+	_countdown_label.add_theme_font_size_override("font_size", 14)
+	_countdown_label.add_theme_color_override("font_color", WARNING_COLOR)
+	_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_countdown_label.hide()
+	turn_box.add_child(_countdown_label)
 
 	_end_turn_button = _make_button("End Turn", 0)
 	_end_turn_button.pressed.connect(func() -> void: end_turn_requested.emit())
@@ -96,6 +110,59 @@ func _ready() -> void:
 
 	_build_notice()
 	_build_idle_prompt()
+
+
+## "Score 42"; the tooltip has the breakdown. A "+3" floats up when it rises.
+func _build_score_indicator(parent: Control) -> void:
+	_score_panel = PanelContainer.new()
+	_score_panel.add_theme_stylebox_override("panel", UiStyle.panel())
+	_score_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	parent.add_child(_score_panel)
+	_score_label = Label.new()
+	_score_label.add_theme_font_size_override("font_size", 18)
+	_score_label.add_theme_color_override("font_color", UiStyle.GOLD)
+	_score_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_score_panel.add_child(_score_label)
+
+
+## `score`: the score to show; `tooltip`: its breakdown; `frozen`: the game is
+## over and the player kept playing (the score no longer changes).
+func set_score(score: int, tooltip: String, frozen: bool) -> void:
+	_score_label.text = ("Final score %d" if frozen else "Score %d") % score
+	_score_panel.tooltip_text = tooltip
+	if _shown_score >= 0 and score > _shown_score and not frozen:
+		_float_text("+%d" % (score - _shown_score), _score_panel)
+	_shown_score = score
+
+
+## Forget the shown score (new game), so the next one doesn't float a "+N".
+func reset_score() -> void:
+	_shown_score = -1
+
+
+## "12 turns remaining" under the turn label ("" hides it).
+func set_countdown(text: String, urgent: bool) -> void:
+	_countdown_label.text = text
+	_countdown_label.visible = text != ""
+	_countdown_label.add_theme_color_override("font_color", DANGER_COLOR if urgent else WARNING_COLOR)
+
+
+## A small gold label that rises out of `anchor` and fades.
+func _float_text(text: String, anchor: Control) -> void:
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.45))
+	label.add_theme_color_override("font_outline_color", Color(0.3, 0.2, 0.0))
+	label.add_theme_constant_override("outline_size", 4)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(label)
+	var rect := anchor.get_global_rect()
+	label.position = Vector2(rect.get_center().x - 10.0, rect.end.y) - get_global_position()
+	var tween := label.create_tween().set_parallel()
+	tween.tween_property(label, "position:y", label.position.y + 26.0, 0.9).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, 0.9).set_delay(0.3)
+	tween.chain().tween_callback(label.queue_free)
 
 
 ## "Writing in 4 turns" over a progress bar; clicking opens the research picker.

@@ -7,11 +7,11 @@
 		"per_tier": 0
 	},
 	"techs": [
-		{ "id": "pottery",           "name": "Pottery",           "tier": 1, "prerequisites": [],                        "unlocks": ["granary"] },
+		{ "id": "pottery",           "name": "Pottery",           "tier": 1, "prerequisites": [],                        "unlocks": ["granary", "hanging_gardens"] },
 		{ "id": "alphabet",          "name": "Alphabet",          "tier": 1, "prerequisites": [],                        "unlocks": [] },
-		{ "id": "bronze_working",    "name": "Bronze Working",    "tier": 1, "prerequisites": [],                        "unlocks": [] },
+		{ "id": "bronze_working",    "name": "Bronze Working",    "tier": 1, "prerequisites": [],                        "unlocks": ["colossus"] },
 		{ "id": "horseback_riding",  "name": "Horseback Riding",  "tier": 1, "prerequisites": [],                        "unlocks": ["horseman"] },
-		{ "id": "masonry",           "name": "Masonry",           "tier": 1, "prerequisites": [],                        "unlocks": ["city_walls"] },
+		{ "id": "masonry",           "name": "Masonry",           "tier": 1, "prerequisites": [],                        "unlocks": ["city_walls", "great_wall"] },
 		{ "id": "writing",           "name": "Writing",           "tier": 2, "prerequisites": ["alphabet"],              "unlocks": ["library"] },
 		{ "id": "ceremonial_burial", "name": "Ceremonial Burial", "tier": 1, "prerequisites": [],                        "unlocks": [] },
 		{ "id": "warrior_code",      "name": "Warrior Code",      "tier": 2, "prerequisites": ["bronze_working"],        "unlocks": ["archer"] },

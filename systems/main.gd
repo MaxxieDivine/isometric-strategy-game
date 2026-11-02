@@ -33,6 +33,11 @@ var _seed_picker := RandomNumberGenerator.new()
 @onready var city_panel: CityPanel = $UI/CityPanel
 @onready var research_picker: ResearchPicker = $UI/ResearchPicker
 @onready var tech_tree: TechTreeView = $UI/TechTreeView
+## Built in code (see _build_overlays) so main.tscn stays unchanged.
+var wonder_card: WonderCard
+var end_screen: EndScreen
+## The game ended while a wonder card was up: show the end screen after it.
+var _end_screen_pending := false
 
 ## The last notification card, so mid-turn news (an auto-picked tech, a
 ## fight) can be added to it instead of replacing it.
@@ -65,12 +70,37 @@ func _ready() -> void:
 	tech_tree.close_requested.connect(tech_tree.hide)
 	hud.fortify_requested.connect(_fortify_selected_unit)
 	hud.notice_clicked.connect(_jump_to_card_place)
+	_build_overlays()
 	_seed_picker.randomize()
 	_new_game(_seed_picker.randi())
 
 
+func _build_overlays() -> void:
+	# A full-screen holder above the HUD, so the overlays can center
+	# themselves and play their bursts.
+	var overlays := Control.new()
+	overlays.name = "Overlays"
+	overlays.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$UI.add_child(overlays)
+	overlays.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var ui := overlays
+	wonder_card = WonderCard.new()
+	ui.add_child(wonder_card)
+	wonder_card.closed.connect(_on_wonder_card_closed)
+	end_screen = EndScreen.new()
+	ui.add_child(end_screen)
+	end_screen.new_game_requested.connect(func() -> void: _new_game(_seed_picker.randi()))
+	end_screen.keep_playing_requested.connect(_keep_playing)
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("end_turn"):
+	if end_screen.visible:
+		# The end screen has its own buttons; the map waits behind it.
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("deselect") and wonder_card.is_showing():
+		wonder_card.dismiss()
+	elif event.is_action_pressed("end_turn"):
 		_end_turn()
 	elif event.is_action_pressed("skip_unit"):
 		_skip_selected_unit()
@@ -125,6 +155,10 @@ func _new_game(map_seed: int) -> void:
 	hud.hide_idle_prompt()
 	research_picker.hide()
 	tech_tree.hide()
+	wonder_card.clear()
+	end_screen.hide()
+	_end_screen_pending = false
+	hud.reset_score()
 	_card_title = ""
 	_card_jump = NO_CELL
 	# Inset by half a tile so the jagged stacked-row edges stay off screen.
@@ -156,7 +190,15 @@ func _end_turn() -> void:
 
 
 func _confirm_end_turn() -> void:
+	if _end_screen_pending:
+		# The game just ended under a wonder card: show the result instead.
+		_end_screen_pending = false
+		wonder_card.clear()
+		_show_end_screen()
+		return
 	hud.hide_idle_prompt()
+	# Ending the turn moves past any celebration still on screen.
+	wonder_card.clear()
 	_apply_events(GameActions.end_turn(state))
 	_selected_unit = NO_UNIT
 	_select_next_unit()
@@ -344,14 +386,18 @@ func _refresh_city_ui() -> void:
 	var total := Yields.city_total(state, city)
 	var production := CityRules.net_production(state, city)
 	var queue_names: Array = []
+	var queue_wonders: Array = []
 	for id in city.queue:
 		queue_names.append(Production.display_name(id))
+		queue_wonders.append(Production.is_wonder(id))
 	var available: Array = []
 	for id in Production.available_items(state, city):
 		available.append({
 			"id": id,
 			"name": Production.display_name(id),
 			"cost": Production.cost(id),
+			"wonder": Production.is_wonder(id),
+			"tooltip": WonderDefs.effect_text(id) if Production.is_wonder(id) else "",
 			# Next in line counts the stored production; behind others it starts from zero.
 			"turns": Production.turns_for(city, id, production) if city.queue.is_empty() 				else (ceili(float(Production.cost(id)) / production) if production > 0 else -1),
 		})
@@ -376,6 +422,8 @@ func _refresh_city_ui() -> void:
 		"blocked": Production.blocked_reason(city, city.queue[0]) if not city.queue.is_empty() else "",
 		"available": available,
 		"buildings": building_names,
+		"queue_wonders": queue_wonders,
+		"wonders": _wonder_status(city),
 		"trade": total[Yields.TRADE],
 		"science": int(state.players[city.owner]["science"]),
 		"science_per_turn": CityRules.science(state, city),
@@ -397,6 +445,166 @@ func _refresh_city_ui() -> void:
 			status = "taken"
 		tiles.append({ "pos": map_view.grid_to_world(cell), "yields": Yields.tile(state.map, cell), "status": status })
 	city_overlay.show_tiles(tiles)
+
+
+## One line on every wonder from this city's point of view, to tease what's
+## next: built (where), being built, available, or the tech it needs.
+func _wonder_status(city: CityState) -> String:
+	var parts := PackedStringArray()
+	for id in WonderDefs.ids():
+		var wonder_name := WonderDefs.display_name(id)
+		if Wonders.is_built(state, id):
+			var where := Wonders.city_of(state, id)
+			var owner := Wonders.owner_of(state, id)
+			var by := where.name if where != null and owner == city.owner else "the %s" % state.players[owner]["name"]
+			parts.append("★ %s (%s)" % [wonder_name, by])
+		elif city.queue.has(id):
+			parts.append("%s: building here" % wonder_name)
+		elif Wonders.queued_by(state, city.owner, id, city) != null:
+			parts.append("%s: building in %s" % [wonder_name, Wonders.queued_by(state, city.owner, id, city).name])
+		elif Research.has_unlocked(state, city.owner, id):
+			parts.append("%s: available" % wonder_name)
+		else:
+			parts.append("%s: needs %s" % [wonder_name, TechDefs.display_name(TechDefs.required_for(id))])
+	return "Wonders   " + "   ·   ".join(parts)
+
+
+# --- Wonders and the end of the game --------------------------------------------
+
+func _announce_wonder(event: Dictionary) -> void:
+	var id: String = event["wonder"]
+	var def := WonderDefs.get_def(id)
+	var city := state.get_city(int(event["city_id"]))
+	var turn := int(event["turn"])
+	wonder_card.announce({
+		"name": WonderDefs.display_name(id),
+		"effect": WonderDefs.effect_text(id),
+		"place": "%s   ·   Turn %d   ·   %s" % [city.name if city != null else "", turn,
+			Calendar.format_year(Calendar.year_for_turn(turn))],
+		"sprite": String(def.get("sprite", "")),
+		"color": Color.html(String(def.get("placeholder_color", "#cccccc"))),
+		"letter": String(def.get("letter", "?")),
+	})
+
+
+func _on_wonder_card_closed() -> void:
+	if _end_screen_pending:
+		_end_screen_pending = false
+		_show_end_screen()
+
+
+func _show_end_screen() -> void:
+	if wonder_card.is_showing():
+		_end_screen_pending = true
+		return
+	_close_city()
+	research_picker.hide()
+	tech_tree.hide()
+	hud.hide_idle_prompt()
+	end_screen.show_result(_end_screen_info())
+
+
+func _keep_playing() -> void:
+	end_screen.hide()
+	_apply_events(GameActions.keep_playing(state))
+
+
+func _end_screen_info() -> Dictionary:
+	var over := state.game_over
+	var winner := int(over["winner"])
+	var last_turn := int(over["turn"])
+	var reason := "The age has ended after %d turns" % last_turn
+	if over["reason"] == Victory.WONDER_VICTORY:
+		if winner == PLAYER:
+			reason = "Wonder Victory!   All the wonders of the world are yours (turn %d)" % last_turn
+		else:
+			reason = "The %s claimed a Wonder Victory on turn %d" % [state.players[winner]["name"], last_turn]
+	var breakdown := Score.breakdown(state, PLAYER)
+	var rows: Array = []
+	var labels := { "citizens": "Citizens", "techs": "Techs known", "wonders": "Wonders", "camps_destroyed": "Camps destroyed" }
+	for part in Score.PARTS:
+		var item: Dictionary = breakdown[part]
+		rows.append({ "label": labels[part], "detail": "%d × %d" % [item["count"], Score.weight(part)], "points": item["points"] })
+	var total := int(breakdown["total"])
+	var title := Score.title_for(total)
+
+	var wonders: Array = []
+	for id in WonderDefs.ids():
+		if Wonders.is_built(state, id):
+			var record := Wonders.record(state, id)
+			var city := Wonders.city_of(state, id)
+			var owner := Wonders.owner_of(state, id)
+			var where := city.name if city != null else "a lost city"
+			var who := "" if owner == PLAYER else "the %s, " % state.players[owner]["name"]
+			wonders.append({ "name": WonderDefs.display_name(id), "mine": owner == PLAYER,
+				"detail": "%s%s, turn %d" % [who, where, record["turn"]] })
+		else:
+			wonders.append({ "name": WonderDefs.display_name(id), "mine": false, "detail": "never built" })
+
+	var series: Array = []
+	var markers: Array = []
+	for player_id in state.civ_player_ids():
+		series.append({ "name": String(state.players[player_id]["name"]),
+			"color": Color.html(String(state.players[player_id]["color"])),
+			"points": Score.history_of(state, player_id) })
+		for id in WonderDefs.ids():
+			if Wonders.is_built(state, id) and int(Wonders.record(state, id)["builder"]) == player_id:
+				markers.append({ "turn": int(Wonders.record(state, id)["turn"]), "series": series.size() - 1 })
+
+	var moments: Array = []
+	for entry: Dictionary in Chronicle.entries(state):
+		var player := int(entry["player"])
+		var text := ""
+		var color := Color(0.75, 0.78, 0.85)
+		match String(entry["type"]):
+			"city_founded":
+				if player == PLAYER:
+					text = "Founded %s" % entry["name"]
+			"tech_discovered":
+				if player == PLAYER:
+					text = "Discovered %s" % entry["name"]
+					color = Color("#8ec5ee")
+			"camp_destroyed":
+				if player == PLAYER:
+					text = "Destroyed a barbarian camp" + (" near %s" % entry["city"] if entry["city"] != "" else "")
+					color = Color("#f2b84e")
+			"wonder_built":
+				var by := "" if player == PLAYER else "The %s: " % state.players[player]["name"]
+				text = "%sCompleted the %s in %s" % [by, entry["name"], entry["city"]]
+				color = Color(1.0, 0.86, 0.4)
+		if text != "":
+			moments.append({ "turn": int(entry["turn"]), "text": text, "color": color })
+	return {
+		"reason": reason,
+		"rating": String(title.get("name", "")),
+		"blurb": String(title.get("blurb", "")),
+		"score": total,
+		"breakdown": rows,
+		"wonders": wonders,
+		"series": series,
+		"markers": markers,
+		"moments": moments,
+	}
+
+
+func _refresh_score() -> void:
+	var breakdown := Score.breakdown(state, PLAYER)
+	var lines := PackedStringArray()
+	var labels := { "citizens": "Citizens", "techs": "Techs", "wonders": "Wonders", "camps_destroyed": "Camps destroyed" }
+	for part in Score.PARTS:
+		var item: Dictionary = breakdown[part]
+		lines.append("%s   %d × %d = %d" % [labels[part], item["count"], Score.weight(part), item["points"]])
+	var frozen := Victory.is_over(state)
+	if frozen:
+		lines.append("The game is over: the score is frozen")
+	else:
+		lines.append("The game ends after turn %d" % state.turn_limit)
+	hud.set_score(int(breakdown["total"]), "\n".join(lines), frozen)
+	if Victory.show_countdown(state):
+		var left := Victory.turns_remaining(state)
+		hud.set_countdown("Final turn" if left == 1 else "%d turns remaining" % left, left <= 5)
+	else:
+		hud.set_countdown("", false)
 
 
 # --- Research -----------------------------------------------------------------
@@ -510,6 +718,9 @@ func _apply_events(events: Array[Dictionary]) -> void:
 				hud.notify("%s is founded!" % city.name, PackedStringArray(["Click the city to choose what to build"]))
 			"build_failed", "research_failed":
 				hud.notify(event["reason"])
+			"game_continued":
+				hud.notify("The age goes on", PackedStringArray([
+					"Your final score stays at %d. Play on as long as you like." % Score.score(state, PLAYER)]))
 			"turn_started":
 				new_turn = event["turn"]
 	var news := TurnNews.describe(state, events, PLAYER)
@@ -535,6 +746,11 @@ func _apply_events(events: Array[Dictionary]) -> void:
 			_card_jump = news["jump"]
 		_show_card(not highlights.is_empty())
 	_refresh_world()
+	for event: Dictionary in news["wonders"]:
+		_announce_wonder(event)
+	if bool(news["game_over"]):
+		_show_end_screen()
+		return
 	if bool(news["discovered"]):
 		_open_research_picker()
 	elif new_turn != -1 and research_picker.visible and Research.current(state, PLAYER) != "":
@@ -571,6 +787,7 @@ func _refresh_world() -> void:
 	_refresh_city_ui()
 	_refresh_research()
 	hud.set_turn(state.turn, _year_text())
+	_refresh_score()
 	_refresh_turn_status()
 
 

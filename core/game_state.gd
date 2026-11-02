@@ -7,7 +7,10 @@ extends RefCounted
 ## 5: units gained hp, fortified, moved, home_city, camp_id, spotted; players
 ##    gained `barbarian`; barbarian camps and their timers were added. Older
 ##    saves get a barbarian player and full-health units on load.
-const VERSION := 5
+## 6: wonders, score history, chronicle, game_over, turn_limit; players gained
+##    `camps_destroyed`. Older saves load with no wonders, an empty history,
+##    the default turn limit, and 0 camps destroyed.
+const VERSION := 6
 
 var map: MapState
 var turn: int = 1
@@ -16,6 +19,7 @@ var turn: int = 1
 ## `civ` is an id in data/civs.json (border color etc.); "" for none.
 ## `science` is stored science toward `research` (see Research).
 ## `barbarian` marks the barbarian player (no cities, no research, AI moved).
+## `camps_destroyed` counts barbarian camps the player cleared (for score).
 var players: Array[Dictionary] = []
 var units: Array[UnitState] = []
 var next_unit_id: int = 1
@@ -27,6 +31,16 @@ var camps: Array[CampState] = []
 var next_camp_id: int = 1
 ## Earliest turn a new barbarian camp may appear (0 = not scheduled yet).
 var next_camp_turn: int = 0
+## Wonder id -> { "city_id": int, "builder": int, "turn": int } (see Wonders).
+var wonders: Dictionary = {}
+## [{ "turn": int, "scores": { "<player id>": int } }], one per turn (see Score).
+var score_history: Array = []
+## Key moments for the end screen (see Chronicle).
+var chronicle: Array = []
+## {} while playing; the result once the game has ended (see Victory).
+var game_over: Dictionary = {}
+## The game ends after this turn is played.
+var turn_limit: int = 150
 ## All gameplay randomness draws from this, so saves resume deterministically.
 var rng := RandomNumberGenerator.new()
 
@@ -37,7 +51,7 @@ var rng := RandomNumberGenerator.new()
 func add_player(player_name: String, color: String, civ: String = "", barbarian: bool = false) -> int:
 	var player_id := players.size()
 	players.append({ "id": player_id, "name": player_name, "color": color, "civ": civ,
-		"science": 0, "known_techs": [], "research": "", "barbarian": barbarian })
+		"science": 0, "known_techs": [], "research": "", "barbarian": barbarian, "camps_destroyed": 0 })
 	var tiles := PackedByteArray()
 	tiles.resize(map.width * map.height)
 	explored.append(tiles)
@@ -268,6 +282,11 @@ func to_dict() -> Dictionary:
 		"camps": camp_data,
 		"next_camp_id": next_camp_id,
 		"next_camp_turn": next_camp_turn,
+		"wonders": wonders.duplicate(true),
+		"score_history": score_history.duplicate(true),
+		"chronicle": chronicle.duplicate(true),
+		"game_over": game_over.duplicate(true),
+		"turn_limit": turn_limit,
 		# 64-bit values as strings: JSON numbers lose precision above 2^53.
 		"rng": { "seed": str(rng.seed), "state": str(rng.state) },
 	}
@@ -289,6 +308,7 @@ static func from_dict(data: Dictionary) -> GameState:
 			"known_techs": _strings(entry.get("known_techs", [])),
 			"research": String(entry.get("research", "")),
 			"barbarian": bool(entry.get("barbarian", false)),
+			"camps_destroyed": int(entry.get("camps_destroyed", 0)),
 		})
 	for entry: Variant in data["units"]:
 		state.units.append(UnitState.from_dict(entry))
@@ -302,12 +322,46 @@ static func from_dict(data: Dictionary) -> GameState:
 		state.camps.append(CampState.from_dict(entry))
 	state.next_camp_id = int(data.get("next_camp_id", 1))
 	state.next_camp_turn = int(data.get("next_camp_turn", 0))
+	# Missing before version 6.
+	var wonder_data: Dictionary = data.get("wonders", {})
+	for id: Variant in wonder_data:
+		var record: Dictionary = wonder_data[id]
+		state.wonders[String(id)] = { "city_id": int(record["city_id"]), "builder": int(record["builder"]),
+			"turn": int(record["turn"]) }
+	for entry: Variant in data.get("score_history", []):
+		var raw: Dictionary = entry["scores"]
+		var scores := {}
+		for key: Variant in raw:
+			scores[String(key)] = int(raw[key])
+		state.score_history.append({ "turn": int(entry["turn"]), "scores": scores })
+	for entry: Variant in data.get("chronicle", []):
+		state.chronicle.append({ "turn": int(entry["turn"]), "player": int(entry["player"]),
+			"type": String(entry["type"]), "name": String(entry["name"]), "city": String(entry.get("city", "")) })
+	state.game_over = _game_over_from_data(data.get("game_over", {}))
+	state.turn_limit = int(data.get("turn_limit", Victory.default_turn_limit()))
 	state.rng.seed = String(data["rng"]["seed"]).to_int()
 	state.rng.state = String(data["rng"]["state"]).to_int()
 	# Before version 5 there were no barbarians.
 	if int(data.get("version", 0)) < 5:
 		state.ensure_barbarian_player()
 	return state
+
+
+## JSON turns ints into floats; restore them so a reload is identical.
+static func _game_over_from_data(data: Dictionary) -> Dictionary:
+	if data.is_empty():
+		return {}
+	var final := {}
+	var final_data: Dictionary = data.get("final", {})
+	for player: Variant in final_data:
+		var entry: Dictionary = final_data[player]
+		var breakdown := { "total": int(entry["total"]) }
+		for part in Score.PARTS:
+			var item: Dictionary = entry.get(part, {})
+			breakdown[part] = { "count": int(item.get("count", 0)), "points": int(item.get("points", 0)) }
+		final[String(player)] = breakdown
+	return { "reason": String(data["reason"]), "turn": int(data["turn"]), "winner": int(data["winner"]),
+		"final": final, "continued": bool(data.get("continued", false)) }
 
 
 static func _strings(data: Array) -> Array:

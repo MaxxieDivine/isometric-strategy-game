@@ -180,6 +180,7 @@ static func destroy_camp(state: GameState, unit: UnitState, camp: CampState) -> 
 	var reward: Dictionary = rules().get("camp_reward", {})
 	var event := { "type": "camp_destroyed", "camp_id": camp.id, "cell": camp.position, "player": unit.owner, "city_id": 0 }
 	state.remove_camp(camp.id)
+	state.players[unit.owner]["camps_destroyed"] = int(state.players[unit.owner].get("camps_destroyed", 0)) + 1
 	var city := _nearest_city(state, unit.owner, camp.position)
 	if state.rng.randi_range(0, 1) == 0 and city != null:
 		event["reward"] = "production"

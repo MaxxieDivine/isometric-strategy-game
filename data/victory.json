@@ -1,0 +1,8 @@
+{
+	"version": 1,
+	"comment": "The game ends after turn `turn_limit` is played. The top bar counts down over the last `countdown_turns` turns.",
+	"turn_limit": 150,
+	"countdown_turns": 20,
+	"countdown_news_at": [20, 10, 5, 1],
+	"wonder_victory": true
+}

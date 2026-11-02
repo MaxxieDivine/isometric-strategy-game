@@ -1,25 +1,33 @@
 class_name Production
 extends RefCounted
 ## Build queues: what a city can build, how long it takes, and what happens
-## when an item completes. Buildable items are units (data/units.json) and
-## buildings (data/buildings.json); their ids share one namespace.
+## when an item completes. Buildable items are units (data/units.json),
+## buildings (data/buildings.json) and wonders (data/wonders.json); their ids
+## share one namespace. A wonder can be built once in the whole world.
 
 const UNIT := "unit"
 const BUILDING := "building"
+const WONDER := "wonder"
 
 static var _checked_ids := false
 
 
 # --- Item lookups -------------------------------------------------------------
 
-## "unit", "building", or "" for an unknown id.
+## "unit", "building", "wonder", or "" for an unknown id.
 static func kind(id: String) -> String:
 	_check_ids()
 	if UnitDefs.has(id):
 		return UNIT
 	if BuildingDefs.has(id):
 		return BUILDING
+	if WonderDefs.has(id):
+		return WONDER
 	return ""
+
+
+static func is_wonder(id: String) -> bool:
+	return kind(id) == WONDER
 
 
 static func get_def(id: String) -> Dictionary:
@@ -28,6 +36,8 @@ static func get_def(id: String) -> Dictionary:
 			return UnitDefs.get_def(id)
 		BUILDING:
 			return BuildingDefs.get_def(id)
+		WONDER:
+			return WonderDefs.get_def(id)
 	return {}
 
 
@@ -39,20 +49,22 @@ static func display_name(id: String) -> String:
 	return String(get_def(id).get("name", id))
 
 
-## Name for news lines: "a Granary", "City Walls".
+## Name for news lines: "a Granary", "City Walls", "the Colossus".
 static func news_name(id: String) -> String:
 	var article := String(get_def(id).get("article", "a"))
 	var item_name := display_name(id)
 	return item_name if article == "" else "%s %s" % [article, item_name]
 
 
-## Every buildable id: units first, then buildings, in data order.
+## Every buildable id: units, then buildings, then wonders, in data order.
 static func all_items() -> Array[String]:
 	var result: Array[String] = []
 	for def in UnitDefs.all():
 		if def.has("cost"):
 			result.append(String(def["id"]))
 	for def in BuildingDefs.all():
+		result.append(String(def["id"]))
+	for def in WonderDefs.all():
 		result.append(String(def["id"]))
 	return result
 
@@ -64,6 +76,9 @@ static func _check_ids() -> void:
 	for def in BuildingDefs.all():
 		if UnitDefs.has(String(def["id"])):
 			push_error("Id '%s' is both a unit and a building" % def["id"])
+	for def in WonderDefs.all():
+		if UnitDefs.has(String(def["id"])) or BuildingDefs.has(String(def["id"])):
+			push_error("Wonder id '%s' is also a unit or building" % def["id"])
 
 
 # --- Queue rules --------------------------------------------------------------
@@ -83,6 +98,15 @@ static func can_enqueue(state: GameState, city: CityState, id: String) -> String
 				return "%s already has %s" % [city.name, display_name(id)]
 			if city.queue.has(id):
 				return "%s is already queued" % display_name(id)
+		WONDER:
+			var built_in := Wonders.city_of(state, id)
+			if Wonders.is_built(state, id):
+				return "%s was completed%s" % [display_name(id), " in " + built_in.name if built_in != null else ""]
+			if city.queue.has(id):
+				return "%s is already queued" % display_name(id)
+			var other := Wonders.queued_by(state, city.owner, id, city)
+			if other != null:
+				return "%s is already being built in %s" % [display_name(id), other.name]
 	return ""
 
 
@@ -125,10 +149,13 @@ static func turns_for(city: CityState, id: String, production: int) -> int:
 
 ## Banks this turn's production and completes the head of the queue if it is
 ## paid for and not blocked. At most one item completes per turn; leftover
-## production carries over to the next item.
+## production carries over to the next item. A wonder finished here leaves
+## every other queue (their stored production stays; see Wonders.drop_taken).
 static func process(state: GameState, city: CityState, production: int) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	city.production_box += production
+	# Wonders completed elsewhere (e.g. earlier this turn) are no longer buildable.
+	events.append_array(Wonders.drop_taken(state))
 	if city.queue.is_empty():
 		return events
 	var id := city.queue[0]
@@ -149,7 +176,13 @@ static func process(state: GameState, city: CityState, production: int) -> Array
 				CityRules.auto_assign(state, city)
 		BUILDING:
 			city.buildings.append(id)
+		WONDER:
+			Wonders.complete(state, city, id)
+			event = { "type": "wonder_built", "city_id": city.id, "item": id, "wonder": id,
+				"player": city.owner, "turn": state.turn }
 	events.append(event)
 	if city.queue.is_empty():
 		events.append({ "type": "city_idle", "city_id": city.id })
+	if kind(id) == WONDER:
+		events.append_array(Wonders.drop_taken(state))
 	return events

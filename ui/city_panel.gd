@@ -13,6 +13,10 @@ const MUTED := Color(0.75, 0.78, 0.85)
 const PRODUCTION_COLOR := Color("#d9813a")
 const WARNING_COLOR := Color("#f2b84e")
 const SECTION_COLOR := Color(0.6, 0.62, 0.68)
+const QUEUE_BG := Color(0.2, 0.17, 0.12, 0.95)
+const ITEM_BG := Color(0.12, 0.14, 0.2, 0.95)
+const WONDER_BG := Color(0.42, 0.3, 0.08, 0.98)
+const WONDER_MARK := "★ "
 
 var _name_label: Label
 var _size_label: Label
@@ -24,6 +28,7 @@ var _build_label: Label
 var _queue_box: VBoxContainer
 var _build_grid: GridContainer
 var _buildings_label: Label
+var _wonders_label: Label
 var _trade_label: Label
 var _citizens_label: Label
 var _units_label: Label
@@ -77,6 +82,8 @@ func _ready() -> void:
 	_citizens_label = _add_label(box, 15, Color.WHITE)
 	_buildings_label = _add_label(box, 14, MUTED)
 	_buildings_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_wonders_label = _add_label(box, 13, MUTED)
+	_wonders_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	var hint := _add_label(box, 12, Color(0.6, 0.62, 0.68))
 	hint.text = "Click a tile in the city radius to move a citizen there. Click a worked tile to free it."
@@ -129,7 +136,9 @@ func _add_label(parent: Control, font_size: int, color: Color) -> Label:
 ## trade, science, science_per_turn, working, idle,
 ## queue (Array of names), current_cost (0 if nothing queued),
 ## turns_to_complete, blocked (reason or ""), available (Array of
-## { id, name, cost, turns }), buildings (Array of names).
+## { id, name, cost, turns, wonder, tooltip }), buildings (Array of names),
+## queue_wonders (Array of bool, parallel to queue), wonders (one-line status
+## of every wonder, "" to hide).
 func show_city(info: Dictionary) -> void:
 	_name_label.text = info["name"]
 	_size_label.text = "Size %d" % info["size"]
@@ -165,6 +174,9 @@ func show_city(info: Dictionary) -> void:
 		_signed(info["trade"]), _signed(info["science_per_turn"]), info["science"]]
 	var buildings: Array = info["buildings"]
 	_buildings_label.text = "Buildings   " + (", ".join(PackedStringArray(buildings)) if not buildings.is_empty() else "none yet")
+	var wonders := String(info.get("wonders", ""))
+	_wonders_label.text = wonders
+	_wonders_label.visible = wonders != ""
 	var citizens := "Citizens   %d working" % info["working"]
 	if int(info["idle"]) > 0:
 		citizens += ", %d idle" % info["idle"]
@@ -174,6 +186,7 @@ func show_city(info: Dictionary) -> void:
 
 func _show_queue(info: Dictionary) -> void:
 	var queue: Array = info["queue"]
+	var queue_wonders: Array = info.get("queue_wonders", [])
 	var cost: int = info["current_cost"]
 	_build_bar.max_value = maxi(1, cost)
 	_build_bar.value = mini(int(info["production_box"]), cost) if cost > 0 else 0
@@ -195,7 +208,11 @@ func _show_queue(info: Dictionary) -> void:
 	for child in _queue_box.get_children():
 		child.queue_free()
 	for i in queue.size():
-		var entry := _small_button("%d. %s   ✕" % [i + 1, queue[i]], Color(0.2, 0.17, 0.12, 0.95))
+		var is_wonder: bool = i < queue_wonders.size() and bool(queue_wonders[i])
+		var entry := _small_button("%d. %s%s   ✕" % [i + 1, WONDER_MARK if is_wonder else "", queue[i]],
+			WONDER_BG if is_wonder else QUEUE_BG)
+		if is_wonder:
+			entry.add_theme_color_override("font_color", Color(1.0, 0.92, 0.65))
 		entry.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		entry.tooltip_text = "Remove from queue"
 		var index := i
@@ -207,9 +224,14 @@ func _show_queue(info: Dictionary) -> void:
 	for item: Dictionary in info["available"]:
 		var turns: int = item["turns"]
 		var eta := "%dt" % turns if turns > 0 else "–"
-		var button := _small_button("%s  %d · %s" % [item["name"], item["cost"], eta], Color(0.12, 0.14, 0.2, 0.95))
+		var is_wonder := bool(item.get("wonder", false))
+		var button := _small_button("%s%s  %d · %s" % [WONDER_MARK if is_wonder else "", item["name"], item["cost"], eta],
+			WONDER_BG if is_wonder else ITEM_BG)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.tooltip_text = "Cost %d, %s at the current rate" % [item["cost"], eta]
+		if is_wonder:
+			button.add_theme_color_override("font_color", Color(1.0, 0.92, 0.65))
+			button.tooltip_text = "Wonder of the World: %s\nOnly one can exist. %s" % [item.get("tooltip", ""), button.tooltip_text]
 		var id: String = item["id"]
 		button.pressed.connect(func() -> void: enqueue_requested.emit(id))
 		_build_grid.add_child(button)

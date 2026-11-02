@@ -1,0 +1,12 @@
+{
+	"version": 1,
+	"comment": "score = sum of count x weight. Titles: the highest `min` reached wins.",
+	"weights": { "citizens": 1, "techs": 2, "wonders": 10, "camps_destroyed": 3 },
+	"titles": [
+		{ "min": 0,   "name": "Mud-Hut Dreamer",      "blurb": "Your people remember you fondly, mostly for the soup." },
+		{ "min": 25,  "name": "Keeper of the Hearth", "blurb": "A modest realm, warm and well fed." },
+		{ "min": 50,  "name": "River Lord",           "blurb": "Your banners fly over fertile valleys." },
+		{ "min": 80,  "name": "Builder of Ages",      "blurb": "Travelers walk for weeks to see what you raised." },
+		{ "min": 110, "name": "Light of the World",   "blurb": "History will need a bigger book." }
+	]
+}

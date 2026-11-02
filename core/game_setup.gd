@@ -12,9 +12,11 @@ const PLAYER_CIV := "player"
 const STARTING_UNITS: Array[String] = ["settler", "warrior"]
 
 
-static func new_game(map_seed: int, width: int, height: int) -> GameState:
+## `turn_limit` below 1 uses the default from data/victory.json.
+static func new_game(map_seed: int, width: int, height: int, turn_limit: int = -1) -> GameState:
 	var state := GameState.new()
 	state.rng.seed = map_seed
+	state.turn_limit = turn_limit if turn_limit >= 1 else Victory.default_turn_limit()
 	state.map = MapGenerator.generate(width, height, map_seed)
 	var civ := CivDefs.get_def(PLAYER_CIV)
 	var player := state.add_player(String(civ["name"]), String(civ["color"]), PLAYER_CIV)
@@ -23,6 +25,7 @@ static func new_game(map_seed: int, width: int, height: int) -> GameState:
 		state.add_unit(type, player, start)
 	Fog.reveal_for_units(state, player)
 	state.ensure_barbarian_player()
+	Score.record(state)
 	return state
 
 

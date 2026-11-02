@@ -1,0 +1,18 @@
+{
+	"version": 1,
+	"wonders": [
+		{ "id": "hanging_gardens", "name": "Hanging Gardens", "article": "the", "cost": 150, "scope": "civ",
+		  "effects": { "city_food": 1 },
+		  "effect_text": "+1 food in every city you own",
+		  "sprite": "wonder_hanging_gardens", "placeholder_color": "#7bd04f", "letter": "H" },
+		{ "id": "colossus", "name": "Colossus", "article": "the", "cost": 150, "scope": "city",
+		  "effects": { "tile_trade:ocean": 1 },
+		  "effect_text": "+1 trade on every ocean tile its city works",
+		  "sprite": "wonder_colossus", "placeholder_color": "#e0a83a", "letter": "C" },
+		{ "id": "great_wall", "name": "Great Wall", "article": "the", "cost": 180, "scope": "civ",
+		  "effects": {},
+		  "counts_as": { "building": "city_walls", "against": "barbarians" },
+		  "effect_text": "Every city you own counts as having City Walls against barbarians",
+		  "sprite": "wonder_great_wall", "placeholder_color": "#b8b0a0", "letter": "W" }
+	]
+}

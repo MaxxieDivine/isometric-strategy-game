@@ -136,11 +136,13 @@ static func auto_assign(state: GameState, city: CityState, excluded: Array[Vecto
 	for cell in work_area(state, city):
 		if not kept.has(cell) and not excluded.has(cell) and is_workable(state, city, cell):
 			candidates.append(cell)
-			candidate_yields.append(Yields.tile(state.map, cell))
+			candidate_yields.append(Yields.worked_tile(state, city, cell))
 
 	var base := Yields.city_center(state.map, city.position)
 	for cell in kept:
-		base += Yields.tile(state.map, cell)
+		base += Yields.worked_tile(state, city, cell)
+	for i in Yields.NAMES.size():
+		base[i] += Effects.city_effect(state, city, "city_" + Yields.NAMES[i])
 	var food_needed := food_per_citizen() * city.size
 	for i in pick_tiles(base[Yields.FOOD], food_needed, candidate_yields, city.size - kept.size()):
 		city.worked.append(candidates[i])
@@ -201,7 +203,7 @@ static func _least_valuable_tile(state: GameState, city: CityState) -> Vector2i:
 	for cell in city.worked:
 		if city.locked.has(cell):
 			continue
-		var score := _tile_score(Yields.tile(state.map, cell), false)
+		var score := _tile_score(Yields.worked_tile(state, city, cell), false)
 		if score < worst_score:
 			worst = cell
 			worst_score = score
@@ -215,7 +217,7 @@ static func _least_valuable_tile(state: GameState, city: CityState) -> Vector2i:
 static func science(state: GameState, city: CityState) -> int:
 	var trade := Yields.city_total(state, city)[Yields.TRADE]
 	@warning_ignore("integer_division")
-	return trade + trade * BuildingDefs.effect(city, "science_percent") / 100
+	return trade + trade * Effects.city_effect(state, city, "science_percent") / 100
 
 
 # --- Turn processing ----------------------------------------------------------
@@ -230,7 +232,7 @@ static func process_turn(state: GameState, city: CityState) -> Array[Dictionary]
 	if box >= food_box_size(city.size):
 		# A granary keeps part of the full box; otherwise it empties.
 		@warning_ignore("integer_division")
-		city.food_box = food_box_size(city.size) * BuildingDefs.effect(city, "food_kept_on_growth_percent") / 100
+		city.food_box = food_box_size(city.size) * Effects.city_effect(state, city, "food_kept_on_growth_percent") / 100
 		city.size += 1
 		auto_assign(state, city)
 		events.append({ "type": "city_grew", "city_id": city.id, "size": city.size })

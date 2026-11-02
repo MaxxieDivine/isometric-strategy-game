@@ -80,6 +80,25 @@ static func draw_building_marker(canvas: CanvasItem, center: Vector2, size: floa
 	draw_centered_text(canvas, center, letter, int(size * 0.8), color)
 
 
+## A wonder marker: a gold five-pointed star with a colored heart and a
+## letter. `shine` (0..1) brightens it for a slow twinkle.
+static func draw_wonder_marker(canvas: CanvasItem, center: Vector2, size: float, color: Color, letter: String, shine: float = 0.0) -> void:
+	var outer := size / 2.0
+	var inner := outer * 0.5
+	var points := PackedVector2Array()
+	for i in 10:
+		var radius := outer if i % 2 == 0 else inner
+		points.append(center + Vector2.from_angle(-PI / 2.0 + i * PI / 5.0) * radius)
+	var gold := Color(1.0, 0.82, 0.3).lerp(Color(1.0, 0.97, 0.75), shine)
+	canvas.draw_circle(center, outer * (0.95 + 0.25 * shine), Color(1.0, 0.85, 0.4, 0.18 + 0.2 * shine))
+	canvas.draw_colored_polygon(points, gold)
+	var ring := points.duplicate()
+	ring.append(points[0])
+	canvas.draw_polyline(ring, Color(0.35, 0.22, 0.05), 1.2, true)
+	canvas.draw_circle(center, inner * 0.8, color)
+	draw_centered_text(canvas, center, letter, int(size * 0.42), color)
+
+
 ## A little person (a citizen) standing on `feet`, `height` pixels tall:
 ## light fill with a dark outline and a soft shadow, readable on any terrain.
 static func draw_citizen(canvas: CanvasItem, feet: Vector2, height: float, fill: Color, outline: Color) -> void:
