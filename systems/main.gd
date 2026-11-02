@@ -9,6 +9,9 @@ const PLAYER := 0
 const NO_UNIT := -1
 const NO_CITY := -1
 const START_ZOOM := 1.25
+## Touch screens start closer in and may zoom further, so a tile fits a fingertip.
+const TOUCH_START_ZOOM := 2.0
+const TOUCH_MAX_ZOOM := 3.0
 const UNEXPLORED_SWATCH := Color(0.05, 0.06, 0.09)
 const NO_CELL := Vector2i(-1, -1)
 
@@ -126,6 +129,7 @@ func _enter_touch_mode() -> void:
 	_touch_mode = true
 	UiText.touch = true
 	camera.edge_pan_enabled = false
+	camera.max_zoom = TOUCH_MAX_ZOOM
 	hud.set_touch_mode(true)
 	hud.hide_odds()
 	hud.set_hint(_hint_text())
@@ -218,7 +222,8 @@ func _new_game(map_seed: int) -> void:
 	_refresh_world()
 	var units := state.units_of(PLAYER)
 	if not units.is_empty():
-		camera.look_at_world(map_view.grid_to_world(units[0].position), START_ZOOM)
+		camera.look_at_world(map_view.grid_to_world(units[0].position),
+			TOUCH_START_ZOOM if _touch_mode else START_ZOOM)
 	_select_next_unit()
 	_open_research_picker()
 	print("New game: seed %d, start %s" % [map_seed, units[0].position if not units.is_empty() else Vector2i(-1, -1)])
@@ -304,21 +309,28 @@ func _order_move(cell: Vector2i, confirmed: bool = false) -> void:
 
 func _on_tap(screen_pos: Vector2) -> void:
 	var cell := map_view.world_to_grid(_screen_to_world(screen_pos))
-	if cell != _touch_target:
+	if cell == _touch_target and state.get_unit(_selected_unit) != null:
+		# Second tap on the previewed tile: go (even onto your own units).
 		_clear_preview()
+		_order_move(cell, true)
+		return
+	_clear_preview()
 	_on_left_click(cell, true)
 
 
-## A long press is the touch right-click: move there now, even onto your own
-## units or city. With nothing selected it shows what's on the tile.
+## A long press is the touch right-click: it previews a move there even onto
+## your own units or city, and a tap confirms it. Nothing ever moves on a
+## press alone. With nothing selected it shows what's on the tile.
 func _on_long_press(screen_pos: Vector2) -> void:
 	var cell := map_view.world_to_grid(_screen_to_world(screen_pos))
 	_clear_preview()
-	if state.get_unit(_selected_unit) == null:
-		if state.map.in_bounds(cell):
-			_show_tile_info(cell)
+	var unit := state.get_unit(_selected_unit)
+	if not state.map.in_bounds(cell):
 		return
-	_order_move(cell)
+	if unit == null or cell == unit.position:
+		_show_tile_info(cell)
+		return
+	_preview_move(unit, cell)
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector2:
@@ -413,11 +425,11 @@ func _on_left_click(cell: Vector2i, from_touch: bool = false) -> void:
 			_select_unit(here[(index + 1) % here.size()].id)
 			return
 	elif selected != null:
-		if from_touch and cell != _touch_target:
+		if from_touch:
+			# Touch never moves on the first tap: show the route and wait.
 			_preview_move(selected, cell)
 			return
-		_clear_preview()
-		_order_move(cell, from_touch)
+		_order_move(cell)
 		return
 	_show_tile_info(cell)
 
