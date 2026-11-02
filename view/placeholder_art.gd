@@ -41,6 +41,36 @@ static func draw_city_block(canvas: CanvasItem, center: Vector2, size: Vector2, 
 	draw_centered_text(canvas, center, label, int(size.y * 0.8), color)
 
 
+## A dark barbarian tent with a flickering campfire beside it. `time` drives the flicker.
+static func draw_tent(canvas: CanvasItem, center: Vector2, size: Vector2, time: float) -> void:
+	var cloth := Color(0.2, 0.13, 0.08)
+	var outline := Color(0.05, 0.03, 0.02)
+	var base_y := center.y + size.y / 2.0
+	var left := Vector2(center.x - size.x / 2.0, base_y)
+	var right := Vector2(center.x + size.x / 2.0 - 6.0, base_y)
+	var peak := Vector2(center.x - 3.0, center.y - size.y / 2.0)
+	canvas.draw_set_transform(Vector2(center.x, base_y), 0.0, Vector2(1.0, 0.4))
+	canvas.draw_circle(Vector2.ZERO, size.x * 0.55, Color(0, 0, 0, 0.35))
+	canvas.draw_set_transform(Vector2.ZERO)
+	var tent := PackedVector2Array([left, peak, right])
+	canvas.draw_colored_polygon(tent, cloth)
+	# Door flap and a light seam for a bit of bevel.
+	canvas.draw_colored_polygon(PackedVector2Array([
+		Vector2(peak.x - 3, base_y), Vector2(peak.x, peak.y + size.y * 0.45), Vector2(peak.x + 3, base_y)]), outline)
+	canvas.draw_line(peak, left, cloth.lightened(0.3), 1.5)
+	tent.append(left)
+	canvas.draw_polyline(tent, outline, 1.5)
+	# Pole tip and a skull-white pennant so it reads as hostile.
+	canvas.draw_line(peak, peak + Vector2(0, -5), outline, 1.5)
+	canvas.draw_colored_polygon(PackedVector2Array([peak + Vector2(0, -5), peak + Vector2(7, -3), peak + Vector2(0, -1)]),
+		Color(0.85, 0.82, 0.72))
+	# Campfire.
+	var fire := Vector2(right.x + 4.0, base_y - 2.0)
+	var flicker := 1.0 + 0.25 * sin(time * 11.0) + 0.15 * sin(time * 17.0)
+	canvas.draw_circle(fire, 3.6 * flicker, Color(0.95, 0.45, 0.1, 0.9))
+	canvas.draw_circle(fire + Vector2(0, -1), 1.8 * flicker, Color(1.0, 0.85, 0.35))
+
+
 ## A small building marker: a beveled square in `color` with a letter.
 static func draw_building_marker(canvas: CanvasItem, center: Vector2, size: float, color: Color, letter: String) -> void:
 	var rect := Rect2(center - Vector2.ONE * size / 2.0, Vector2.ONE * size)

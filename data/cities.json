@@ -9,5 +9,7 @@
 	"food_per_citizen": 2,
 	"food_box_per_size": 10,
 	"auto_assign_food_target": 2,
+	"free_units": 2,
+	"upkeep_per_unit": 1,
 	"center_bonus": { "food": 0, "production": 1, "trade": 1 }
 }

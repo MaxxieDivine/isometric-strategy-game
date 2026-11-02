@@ -69,10 +69,12 @@ static func _check_ids() -> void:
 # --- Queue rules --------------------------------------------------------------
 
 ## Empty string if `id` may be added to the city's queue, else the reason not.
-static func can_enqueue(city: CityState, id: String) -> String:
+static func can_enqueue(state: GameState, city: CityState, id: String) -> String:
+	if kind(id) == "":
+		return "Unknown item"
+	if not Research.has_unlocked(state, city.owner, id):
+		return "%s needs %s" % [display_name(id), TechDefs.display_name(TechDefs.required_for(id))]
 	match kind(id):
-		"":
-			return "Unknown item"
 		UNIT:
 			if not get_def(id).has("cost"):
 				return "%s can't be built" % display_name(id)
@@ -92,11 +94,11 @@ static func blocked_reason(city: CityState, id: String) -> String:
 	return ""
 
 
-## Items the city could add to its queue now.
-static func available_items(city: CityState) -> Array[String]:
+## Items the city could add to its queue now (locked items are left out).
+static func available_items(state: GameState, city: CityState) -> Array[String]:
 	var result: Array[String] = []
 	for id in all_items():
-		if can_enqueue(city, id) == "":
+		if can_enqueue(state, city, id) == "":
 			result.append(id)
 	return result
 
@@ -138,6 +140,7 @@ static func process(state: GameState, city: CityState, production: int) -> Array
 	match kind(id):
 		UNIT:
 			var unit := state.add_unit(id, city.owner, city.position)
+			unit.home_city = city.id
 			event["unit_id"] = unit.id
 			var pop_cost := int(get_def(id).get("pop_cost", 0))
 			if pop_cost > 0:

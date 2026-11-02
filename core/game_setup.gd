@@ -22,6 +22,7 @@ static func new_game(map_seed: int, width: int, height: int) -> GameState:
 	for type in STARTING_UNITS:
 		state.add_unit(type, player, start)
 	Fog.reveal_for_units(state, player)
+	state.ensure_barbarian_player()
 	return state
 
 

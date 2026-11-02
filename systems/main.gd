@@ -10,6 +10,7 @@ const NO_UNIT := -1
 const NO_CITY := -1
 const START_ZOOM := 1.25
 const UNEXPLORED_SWATCH := Color(0.05, 0.06, 0.09)
+const NO_CELL := Vector2i(-1, -1)
 
 var state: GameState
 var _selected_unit := NO_UNIT
@@ -23,12 +24,28 @@ var _seed_picker := RandomNumberGenerator.new()
 @onready var path_overlay: PathOverlay = $PathOverlay
 @onready var highlight: TileHighlight = $TileHighlight
 @onready var cities_layer: CitiesLayer = $CitiesLayer
+@onready var camps_layer: CampsLayer = $CampsLayer
 @onready var units_layer: UnitsLayer = $UnitsLayer
 @onready var city_overlay: CityOverlay = $CityOverlay
 @onready var camera: MapCamera = $MapCamera
 @onready var hud: Hud = $UI/Hud
 @onready var info_panel: TileInfoPanel = $UI/TileInfoPanel
 @onready var city_panel: CityPanel = $UI/CityPanel
+@onready var research_picker: ResearchPicker = $UI/ResearchPicker
+@onready var tech_tree: TechTreeView = $UI/TechTreeView
+
+## The last notification card, so mid-turn news (an auto-picked tech, a
+## fight) can be added to it instead of replacing it.
+var _card_title := ""
+var _card_lines := PackedStringArray()
+var _card_highlights := PackedStringArray()
+var _card_warnings := PackedStringArray()
+## Where clicking the card takes the camera (e.g. spotted barbarians), or NO_CELL.
+var _card_jump := NO_CELL
+## Tiles the player sees right now (refreshed with the world).
+var _visible := PackedByteArray()
+## A risky attack waiting for its confirming click, or NO_CELL.
+var _pending_attack := NO_CELL
 
 
 func _ready() -> void:
@@ -40,6 +57,14 @@ func _ready() -> void:
 	city_panel.close_requested.connect(_close_city)
 	city_panel.enqueue_requested.connect(_enqueue_build)
 	city_panel.remove_requested.connect(_remove_from_queue)
+	hud.research_clicked.connect(_open_research_picker)
+	hud.tech_tree_requested.connect(_toggle_tech_tree)
+	research_picker.tech_chosen.connect(_choose_research)
+	research_picker.dismissed.connect(_dismiss_research_picker)
+	tech_tree.tech_chosen.connect(_choose_research)
+	tech_tree.close_requested.connect(tech_tree.hide)
+	hud.fortify_requested.connect(_fortify_selected_unit)
+	hud.notice_clicked.connect(_jump_to_card_place)
 	_seed_picker.randomize()
 	_new_game(_seed_picker.randi())
 
@@ -51,8 +76,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		_skip_selected_unit()
 	elif event.is_action_pressed("found_city"):
 		_found_city()
+	elif event.is_action_pressed("tech_tree"):
+		_toggle_tech_tree()
+	elif event.is_action_pressed("fortify"):
+		_fortify_selected_unit()
 	elif event.is_action_pressed("deselect"):
-		if hud.is_idle_prompt_visible():
+		if tech_tree.visible:
+			tech_tree.hide()
+		elif research_picker.visible:
+			_dismiss_research_picker()
+		elif hud.is_idle_prompt_visible():
 			hud.hide_idle_prompt()
 		elif _open_city != NO_CITY:
 			_close_city()
@@ -70,6 +103,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_order_move(cell)
 		else:
 			return
+	elif event is InputEventMouseMotion:
+		_update_attack_odds()
+		return
 	else:
 		return
 	get_viewport().set_input_as_handled()
@@ -81,20 +117,28 @@ func _new_game(map_seed: int) -> void:
 	state = GameSetup.new_game(map_seed, MAP_WIDTH, MAP_HEIGHT)
 	units_layer.clear_units()
 	cities_layer.clear_cities()
+	camps_layer.clear()
 	_selected_unit = NO_UNIT
+	_pending_attack = NO_CELL
 	_close_city()
 	_hide_tile_info()
 	hud.hide_idle_prompt()
+	research_picker.hide()
+	tech_tree.hide()
+	_card_title = ""
+	_card_jump = NO_CELL
 	# Inset by half a tile so the jagged stacked-row edges stay off screen.
 	var half := Vector2(TerrainTilesetBuilder.TILE_SIZE) / 2.0
 	var bounds := map_view.get_grid_world_rect(MAP_WIDTH, MAP_HEIGHT).grow_individual(-half.x, -half.y, -half.x, -half.y)
 	camera.set_bounds(bounds)
-	hud.set_hint("Seed %d   ·   B: found city   ·   Space: skip   ·   Enter: end turn   ·   Right-click: move   ·   R: new world" % map_seed)
+	# The seed is printed to the console (see below); the hint stays short enough to clear the buttons.
+	hud.set_hint("B: found city   ·   F: fortify   ·   Space: skip   ·   Enter: end turn   ·   Right-click: move/attack   ·   T: techs   ·   R: new world")
 	_refresh_world()
 	var units := state.units_of(PLAYER)
 	if not units.is_empty():
 		camera.look_at_world(map_view.grid_to_world(units[0].position), START_ZOOM)
 	_select_next_unit()
+	_open_research_picker()
 	print("New game: seed %d, start %s" % [map_seed, units[0].position if not units.is_empty() else Vector2i(-1, -1)])
 
 
@@ -135,10 +179,28 @@ func _found_city() -> void:
 		_select_next_unit()
 
 
+func _fortify_selected_unit() -> void:
+	var unit := state.get_unit(_selected_unit)
+	if unit == null or UnitDefs.can_found_city(unit.type):
+		return
+	_apply_events(GameActions.fortify_unit(state, unit.id))
+	_select_next_unit()
+
+
 func _order_move(cell: Vector2i) -> void:
 	var unit := state.get_unit(_selected_unit)
 	if unit == null or not state.map.in_bounds(cell):
 		return
+	# Long-shot attacks need a second click on the same target.
+	var defender := _visible_defender(unit, cell)
+	if defender != null and Combat.can_attack(unit):
+		var odds := Combat.win_odds(state, unit, defender)
+		if odds < Combat.confirm_below_odds() and _pending_attack != cell:
+			_pending_attack = cell
+			hud.notify("Only %d%% to win" % roundi(odds * 100.0),
+				PackedStringArray(["Click the %s again to attack anyway" % _unit_name(defender)]))
+			return
+	_pending_attack = NO_CELL
 	_apply_events(GameActions.move_unit(state, unit.id, cell))
 	if unit.needs_orders():
 		_select_unit(unit.id)
@@ -220,7 +282,10 @@ func _select_unit(unit_id: int) -> void:
 	elif _open_city == NO_CITY:
 		info_panel.hide()
 	hud.set_found_city_visible(unit != null and UnitDefs.can_found_city(unit.type))
-	units_layer.sync(state, _selected_unit, map_view)
+	hud.set_fortify_visible(unit != null and not UnitDefs.can_found_city(unit.type) and not unit.fortified)
+	_pending_attack = NO_CELL
+	units_layer.sync(state, _selected_unit, map_view, PLAYER, _visible)
+	_update_attack_odds()
 	_refresh_paths()
 	_refresh_turn_status()
 
@@ -277,12 +342,12 @@ func _refresh_city_ui() -> void:
 		_close_city()
 		return
 	var total := Yields.city_total(state, city)
-	var production := total[Yields.PRODUCTION]
+	var production := CityRules.net_production(state, city)
 	var queue_names: Array = []
 	for id in city.queue:
 		queue_names.append(Production.display_name(id))
 	var available: Array = []
-	for id in Production.available_items(city):
+	for id in Production.available_items(state, city):
 		available.append({
 			"id": id,
 			"name": Production.display_name(id),
@@ -302,6 +367,9 @@ func _refresh_city_ui() -> void:
 		"turns_to_grow": CityRules.turns_to_grow(state, city),
 		"production": production,
 		"production_box": city.production_box,
+		"upkeep": CityRules.upkeep(state, city),
+		"supported": state.units_supported_by(city.id).size(),
+		"free_units": CityRules.free_units(),
 		"queue": queue_names,
 		"current_cost": Production.cost(city.queue[0]) if not city.queue.is_empty() else 0,
 		"turns_to_complete": Production.turns_to_complete(city, production),
@@ -331,15 +399,106 @@ func _refresh_city_ui() -> void:
 	city_overlay.show_tiles(tiles)
 
 
+# --- Research -----------------------------------------------------------------
+
+func _open_research_picker() -> void:
+	var current := Research.current(state, PLAYER)
+	var options: Array = []
+	for id in Research.available(state, PLAYER):
+		options.append({
+			"id": id,
+			"name": TechDefs.display_name(id),
+			"turns": Research.turns_to(state, PLAYER, id),
+			"unlocks": TurnNews.tech_detail(id),
+		})
+	if options.is_empty():
+		research_picker.hide()
+		return
+	var title := "Choose next research"
+	if current != "":
+		title = "Change research"
+	elif Research.known(state, PLAYER).is_empty():
+		title = "Choose research"
+	research_picker.open({
+		"title": title,
+		"subtitle": "+%d science/turn   ·   %d stored   ·   Esc picks the cheapest" % [
+			Research.science_per_turn(state, PLAYER), Research.stored(state, PLAYER)],
+		"current": current,
+		"options": options,
+	})
+
+
+func _choose_research(tech_id: String) -> void:
+	research_picker.hide()
+	tech_tree.hide()
+	_apply_events(GameActions.set_research(state, PLAYER, tech_id))
+
+
+## Closing the picker without a choice researches the cheapest tech.
+func _dismiss_research_picker() -> void:
+	research_picker.hide()
+	_apply_events(GameActions.auto_pick_research(state, PLAYER))
+
+
+func _toggle_tech_tree() -> void:
+	if tech_tree.visible:
+		tech_tree.hide()
+		return
+	var current := Research.current(state, PLAYER)
+	var techs: Array[Dictionary] = []
+	for def in TechDefs.all():
+		var id := String(def["id"])
+		var status := "locked"
+		# The tree's lines already show what a tech leads to.
+		var detail := "Unlocks: " + TurnNews.unlock_names(id) if not TechDefs.unlocks(id).is_empty() else ""
+		if Research.knows(state, PLAYER, id):
+			status = "known"
+		elif id == current:
+			status = "current"
+			detail = _turns_text(Research.turns_to(state, PLAYER, id))
+		elif Research.is_available(state, PLAYER, id):
+			status = "available"
+		techs.append({
+			"id": id,
+			"name": TechDefs.display_name(id),
+			"tier": TechDefs.tier(id),
+			"prerequisites": TechDefs.prerequisites(id),
+			"status": status,
+			"detail": detail,
+		})
+	tech_tree.open(techs)
+
+
+func _turns_text(turns: int) -> String:
+	if turns <= 0:
+		return "no science yet"
+	return "%d turn%s" % [turns, "" if turns == 1 else "s"]
+
+
+func _refresh_research() -> void:
+	var current := Research.current(state, PLAYER)
+	hud.set_research({
+		"tech_name": TechDefs.display_name(current) if current != "" else "",
+		"stored": Research.stored(state, PLAYER),
+		"cost": Research.cost(state, PLAYER, current) if current != "" else 0,
+		"turns": Research.turns_to(state, PLAYER, current) if current != "" else -1,
+		"per_turn": Research.science_per_turn(state, PLAYER),
+		"done": current == "" and Research.available(state, PLAYER).is_empty(),
+	})
+	if research_picker.visible:
+		_open_research_picker()
+
+
 # --- Events → view ------------------------------------------------------------
 
 func _apply_events(events: Array[Dictionary]) -> void:
 	var new_turn := -1
-	var city_news := PackedStringArray()
 	for event in events:
 		match event["type"]:
 			"unit_moved":
 				units_layer.walk(event["unit_id"], map_view.grid_to_world(event["to"]))
+			"combat":
+				units_layer.play_combat(event, map_view)
 			"move_failed":
 				hud.notify("No known route there")
 			"orders_cancelled":
@@ -349,35 +508,68 @@ func _apply_events(events: Array[Dictionary]) -> void:
 			"city_founded":
 				var city := state.get_city(event["city_id"])
 				hud.notify("%s is founded!" % city.name, PackedStringArray(["Click the city to choose what to build"]))
-			"city_grew":
-				city_news.append("%s grew to size %d" % [_city_name(event["city_id"]), event["size"]])
-			"city_shrank":
-				city_news.append("%s starved down to size %d" % [_city_name(event["city_id"]), event["size"]])
-			"city_starving":
-				city_news.append("%s is starving" % _city_name(event["city_id"]))
-			"city_built":
-				city_news.append("%s built %s" % [_city_name(event["city_id"]), Production.news_name(event["item"])])
-			"city_idle":
-				city_news.append("%s has nothing to build" % _city_name(event["city_id"]))
-			"build_failed":
+			"build_failed", "research_failed":
 				hud.notify(event["reason"])
 			"turn_started":
 				new_turn = event["turn"]
+	var news := TurnNews.describe(state, events, PLAYER)
+	var lines: PackedStringArray = news["lines"]
+	var highlights: PackedStringArray = news["highlights"]
+	var warnings: PackedStringArray = news["warnings"]
 	if new_turn != -1:
 		# One batched card per turn: no popup spam.
-		hud.notify("Turn %d  ·  %s" % [new_turn, _year_text()], city_news)
+		_card_title = "Turn %d  ·  %s" % [new_turn, _year_text()]
+		_card_lines = lines
+		_card_highlights = highlights
+		_card_warnings = warnings
+		_card_jump = news["jump"]
+		_show_card(true)
+	elif not (lines.is_empty() and highlights.is_empty() and warnings.is_empty()):
+		# Mid-turn news (a fight, an auto-pick) joins this turn's card.
+		if _card_title == "":
+			_card_title = "Turn %d  ·  %s" % [state.turn, _year_text()]
+		_card_lines.append_array(lines)
+		_card_highlights.append_array(highlights)
+		_card_warnings.append_array(warnings)
+		if news["jump"] != NO_CELL:
+			_card_jump = news["jump"]
+		_show_card(not highlights.is_empty())
 	_refresh_world()
+	if bool(news["discovered"]):
+		_open_research_picker()
+	elif new_turn != -1 and research_picker.visible and Research.current(state, PLAYER) != "":
+		# Ending the turn with the picker open auto-picked; the choice is made.
+		research_picker.hide()
+
+
+func _show_card(celebrate: bool) -> void:
+	hud.notify(_card_title, _card_lines, {
+		"highlights": _card_highlights,
+		"warnings": _card_warnings,
+		"celebrate": celebrate,
+		"clickable": _card_jump != NO_CELL,
+	})
+
+
+func _jump_to_card_place() -> void:
+	if _card_jump != NO_CELL:
+		camera.ensure_visible(map_view.grid_to_world(_card_jump))
+		_show_tile_info(_card_jump)
 
 
 func _refresh_world() -> void:
 	var explored := state.explored[PLAYER]
+	_visible = Fog.compute_visible(state, PLAYER)
 	map_view.render(state.map, explored)
 	territory_layer.sync(state, map_view, PLAYER)
-	fog_view.refresh(state.map.width, state.map.height, explored, Fog.compute_visible(state, PLAYER))
+	fog_view.refresh(state.map.width, state.map.height, explored, _visible)
 	cities_layer.sync(state, map_view)
-	units_layer.sync(state, _selected_unit, map_view)
+	camps_layer.sync(state, map_view, PLAYER)
+	units_layer.sync(state, _selected_unit, map_view, PLAYER, _visible)
+	_update_attack_odds()
 	_refresh_paths()
 	_refresh_city_ui()
+	_refresh_research()
 	hud.set_turn(state.turn, _year_text())
 	_refresh_turn_status()
 
@@ -410,8 +602,11 @@ func _refresh_turn_status() -> void:
 
 func _show_unit_info(unit: UnitState) -> void:
 	var def := UnitDefs.get_def(unit.type)
-	var details := "Moves %d/%d   ·   Attack %d   ·   Defense %d" % [
-		unit.moves_left, unit.max_moves(), int(def.get("attack", 0)), int(def.get("defense", 0))]
+	var details := "Moves %d/%d   ·   Attack %d   ·   Defense %d   ·   HP %d/%d" % [
+		unit.moves_left, unit.max_moves(), int(def.get("attack", 0)), int(def.get("defense", 0)),
+		unit.hp, Combat.max_hp()]
+	if unit.fortified:
+		details += "\nFortified (+%d%% defense until it moves)" % Combat.fortified_percent()
 	if unit.has_goal():
 		var turns := Movement.path_turns(unit, state.map, state.explored[unit.owner])
 		var eta: int = turns.back() + 1 if not turns.is_empty() else 1
@@ -422,6 +617,8 @@ func _show_unit_info(unit: UnitState) -> void:
 		if UnitDefs.can_found_city(unit.type):
 			var reason := CityRules.can_found(state, unit)
 			details += "\n" + ("Press B to found a city here" if reason == "" else reason)
+		elif not unit.fortified:
+			details += "\nF: fortify   ·   Right-click an enemy to attack"
 	info_panel.show_info(def["name"], details, Color.html(state.players[unit.owner]["color"]))
 
 
@@ -435,9 +632,44 @@ func _show_tile_info(cell: Vector2i) -> void:
 	var cost := "Impassable on foot" if not TerrainDefs.passable_by_land(id) \
 		else "Move cost %d" % TerrainDefs.move_cost(id)
 	var y := Yields.tile(state.map, cell)
-	info_panel.show_info(def["name"],
-		"Tile (%d, %d)   ·   %s\nFood %d   ·   Production %d   ·   Trade %d" % [cell.x, cell.y, cost, y.x, y.y, y.z],
-		Color.html(def["placeholder_color"]))
+	var details := "Tile (%d, %d)   ·   %s\nFood %d   ·   Production %d   ·   Trade %d" % [cell.x, cell.y, cost, y.x, y.y, y.z]
+	if TerrainDefs.defense_percent(id) > 0:
+		details += "   ·   Defense +%d%%" % TerrainDefs.defense_percent(id)
+	var camp := state.camp_at(cell)
+	if camp != null and camp.discovered_by.has(PLAYER):
+		details += "\nBarbarian camp: move a unit onto it to destroy it"
+	if _is_visible(cell):
+		for enemy in state.enemy_units_at(cell, PLAYER):
+			details += "\nBarbarian %s   ·   HP %d/%d%s" % [_unit_name(enemy), enemy.hp, Combat.max_hp(),
+				"   ·   fortified" if enemy.fortified else ""]
+	info_panel.show_info(def["name"], details, Color.html(def["placeholder_color"]))
+
+
+func _is_visible(cell: Vector2i) -> bool:
+	return not _visible.is_empty() and _visible[IsoGrid.index_of(cell, state.map.width)] == 1
+
+
+## The enemy that would defend `cell` against `unit`, if the player can see it.
+func _visible_defender(unit: UnitState, cell: Vector2i) -> UnitState:
+	if not state.map.in_bounds(cell) or not _is_visible(cell):
+		return null
+	return Combat.best_defender(state, cell, unit)
+
+
+## "72% to win" beside the mouse while a combat unit is selected and the
+## mouse is over a visible enemy.
+func _update_attack_odds() -> void:
+	var unit := state.get_unit(_selected_unit) if state != null else null
+	if unit == null or not Combat.can_attack(unit):
+		hud.hide_odds()
+		return
+	var defender := _visible_defender(unit, map_view.world_to_grid(get_global_mouse_position()))
+	if defender == null:
+		hud.hide_odds()
+		return
+	var odds := Combat.win_odds(state, unit, defender)
+	hud.show_odds("%d%% to win vs %s" % [roundi(odds * 100.0), _unit_name(defender)],
+		odds >= Combat.confirm_below_odds(), get_viewport().get_mouse_position())
 
 
 func _hide_tile_info() -> void:
@@ -451,11 +683,6 @@ func _hide_tile_info() -> void:
 
 func _unit_name(unit: UnitState) -> String:
 	return String(UnitDefs.get_def(unit.type)["name"]) if unit != null else "A unit"
-
-
-func _city_name(city_id: int) -> String:
-	var city := state.get_city(city_id)
-	return city.name if city != null else "A city"
 
 
 func _year_text() -> String:

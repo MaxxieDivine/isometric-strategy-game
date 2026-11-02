@@ -35,3 +35,8 @@ static func passable_by_land(id: String) -> bool:
 
 static func sight_bonus(id: String) -> int:
 	return int(get_def(id).get("sight_bonus", 0))
+
+
+## Defense bonus for units standing here, in percent (hills +50, forest +25).
+static func defense_percent(id: String) -> int:
+	return int(get_def(id).get("defense_percent", 0))

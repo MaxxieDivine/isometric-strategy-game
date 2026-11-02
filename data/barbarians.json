@@ -1,0 +1,30 @@
+{
+	"version": 1,
+	"comment": "Stages apply from their from_turn onward; the last stage reached wins.",
+	"civ": "barbarians",
+	"camp_sprite": "barbarian_camp",
+	"start_turn": 15,
+	"camp_min_city_distance": 8,
+	"camp_preferred_max_city_distance": 12,
+	"camp_min_camp_distance": 5,
+	"aggro_range": 6,
+	"wander_radius": 3,
+	"camp_stages": [
+		{ "from_turn": 15,  "every": 15, "max_camps": 1 },
+		{ "from_turn": 40,  "every": 12, "max_camps": 2 },
+		{ "from_turn": 80,  "every": 10, "max_camps": 3 },
+		{ "from_turn": 120, "every": 8,  "max_camps": 4 }
+	],
+	"unit_stages": [
+		{ "from_turn": 15,  "every": 10, "max_units": 2 },
+		{ "from_turn": 40,  "every": 8,  "max_units": 4 },
+		{ "from_turn": 80,  "every": 7,  "max_units": 6 },
+		{ "from_turn": 120, "every": 6,  "max_units": 8 }
+	],
+	"unit_types": [
+		{ "from_turn": 15, "types": ["warrior"] },
+		{ "from_turn": 61, "types": ["warrior", "archer"] },
+		{ "from_turn": 91, "types": ["warrior", "archer", "horseman"] }
+	],
+	"camp_reward": { "production": 25, "science": 25 }
+}

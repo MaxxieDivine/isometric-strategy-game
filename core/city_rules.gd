@@ -44,6 +44,24 @@ static func center_bonus() -> Vector3i:
 	return Vector3i(int(bonus.get("food", 0)), int(bonus.get("production", 0)), int(bonus.get("trade", 0)))
 
 
+static func free_units() -> int:
+	return int(rules().get("free_units", 2))
+
+
+static func upkeep_per_unit() -> int:
+	return int(rules().get("upkeep_per_unit", 1))
+
+
+## Production per turn the city pays for the units it supports beyond the free ones.
+static func upkeep(state: GameState, city: CityState) -> int:
+	return maxi(0, state.units_supported_by(city.id).size() - free_units()) * upkeep_per_unit()
+
+
+## Production left for the build queue after upkeep.
+static func net_production(state: GameState, city: CityState) -> int:
+	return Yields.city_total(state, city)[Yields.PRODUCTION] - upkeep(state, city)
+
+
 static func food_box_size(city_size: int) -> int:
 	return (city_size + 1) * int(rules().get("food_box_per_size", 10))
 
@@ -202,7 +220,8 @@ static func science(state: GameState, city: CityState) -> int:
 
 # --- Turn processing ----------------------------------------------------------
 
-## Grows or starves the city, works the build queue, and banks science.
+## Grows or starves the city, pays unit upkeep, works the build queue, and
+## banks science.
 static func process_turn(state: GameState, city: CityState) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	var total := Yields.city_total(state, city)
@@ -225,6 +244,11 @@ static func process_turn(state: GameState, city: CityState) -> Array[Dictionary]
 			events.append({ "type": "city_starving", "city_id": city.id })
 	else:
 		city.food_box = box
-	events.append_array(Production.process(state, city, total[Yields.PRODUCTION]))
+	# Upkeep the city can't pay disbands its newest units.
+	while upkeep(state, city) > total[Yields.PRODUCTION]:
+		var newest: UnitState = state.units_supported_by(city.id).back()
+		state.remove_unit(newest.id)
+		events.append({ "type": "unit_disbanded", "unit_id": newest.id, "unit_type": newest.type, "city_id": city.id })
+	events.append_array(Production.process(state, city, total[Yields.PRODUCTION] - upkeep(state, city)))
 	state.add_science(city.owner, science(state, city))
 	return events

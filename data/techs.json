@@ -1,0 +1,21 @@
+{
+	"version": 1,
+	"cost": {
+		"comment": "cost = base + per_known x (techs already known) + per_tier x (tier - 1)",
+		"base": 10,
+		"per_known": 8,
+		"per_tier": 0
+	},
+	"techs": [
+		{ "id": "pottery",           "name": "Pottery",           "tier": 1, "prerequisites": [],                        "unlocks": ["granary"] },
+		{ "id": "alphabet",          "name": "Alphabet",          "tier": 1, "prerequisites": [],                        "unlocks": [] },
+		{ "id": "bronze_working",    "name": "Bronze Working",    "tier": 1, "prerequisites": [],                        "unlocks": [] },
+		{ "id": "horseback_riding",  "name": "Horseback Riding",  "tier": 1, "prerequisites": [],                        "unlocks": ["horseman"] },
+		{ "id": "masonry",           "name": "Masonry",           "tier": 1, "prerequisites": [],                        "unlocks": ["city_walls"] },
+		{ "id": "writing",           "name": "Writing",           "tier": 2, "prerequisites": ["alphabet"],              "unlocks": ["library"] },
+		{ "id": "ceremonial_burial", "name": "Ceremonial Burial", "tier": 1, "prerequisites": [],                        "unlocks": [] },
+		{ "id": "warrior_code",      "name": "Warrior Code",      "tier": 2, "prerequisites": ["bronze_working"],        "unlocks": ["archer"] },
+		{ "id": "currency",          "name": "Currency",          "tier": 2, "prerequisites": ["bronze_working"],        "unlocks": [] },
+		{ "id": "mathematics",       "name": "Mathematics",       "tier": 2, "prerequisites": ["alphabet", "masonry"],   "unlocks": [] }
+	]
+}

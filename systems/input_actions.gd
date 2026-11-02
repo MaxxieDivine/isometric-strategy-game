@@ -13,6 +13,8 @@ const DEFAULT_KEYS := {
 	"found_city": [KEY_B],
 	"deselect": [KEY_ESCAPE],
 	"regenerate_map": [KEY_R],
+	"tech_tree": [KEY_T],
+	"fortify": [KEY_F],
 }
 
 

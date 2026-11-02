@@ -13,6 +13,9 @@
 [ext_resource type="Script" path="res://view/city_overlay.gd" id="11_city_overlay"]
 [ext_resource type="Script" path="res://ui/city_panel.gd" id="12_city_panel"]
 [ext_resource type="Script" path="res://view/territory_layer.gd" id="13_territory_layer"]
+[ext_resource type="Script" path="res://ui/research_picker.gd" id="14_research_picker"]
+[ext_resource type="Script" path="res://ui/tech_tree_view.gd" id="15_tech_tree"]
+[ext_resource type="Script" path="res://view/camps_layer.gd" id="16_camps_layer"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
@@ -34,6 +37,9 @@ script = ExtResource("5_highlight")
 
 [node name="CitiesLayer" type="Node2D" parent="."]
 script = ExtResource("10_cities_layer")
+
+[node name="CampsLayer" type="Node2D" parent="."]
+script = ExtResource("16_camps_layer")
 
 [node name="UnitsLayer" type="Node2D" parent="."]
 script = ExtResource("6_units_layer")
@@ -63,3 +69,9 @@ script = ExtResource("9_tile_info")
 
 [node name="CityPanel" type="PanelContainer" parent="UI"]
 script = ExtResource("12_city_panel")
+
+[node name="ResearchPicker" type="PanelContainer" parent="UI"]
+script = ExtResource("14_research_picker")
+
+[node name="TechTreeView" type="PanelContainer" parent="UI"]
+script = ExtResource("15_tech_tree")

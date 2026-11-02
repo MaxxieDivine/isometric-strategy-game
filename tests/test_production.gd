@@ -44,7 +44,14 @@ func _make_state(fill: String = "grassland") -> GameState:
 	var state := GameState.new()
 	state.map = MapState.new(20, 40, fill)
 	state.add_player("Test", "#ffffff")
+	# Tech gating has its own tests (test_research.gd); here everything is unlocked.
+	_grant_all_techs(state)
 	return state
+
+
+func _grant_all_techs(state: GameState) -> void:
+	for def in TechDefs.all():
+		Research.known(state, 0).append(String(def["id"]))
 
 
 func _found_at(state: GameState, cell: Vector2i) -> CityState:
@@ -146,7 +153,7 @@ func _test_turns_to_complete() -> void:
 func _test_settler_waits_for_size_two() -> void:
 	var state := _make_state()
 	var city := _found_at(state, CENTER)
-	_check(Production.can_enqueue(city, "settler") == "", "a settler can be queued at size 1")
+	_check(Production.can_enqueue(state, city, "settler") == "", "a settler can be queued at size 1")
 	city.queue.append("settler")
 	city.production_box = 40
 	var events := Production.process(state, city, 0)
@@ -214,13 +221,13 @@ func _test_no_duplicate_buildings() -> void:
 	var again := GameActions.enqueue_build(state, city.id, "granary")
 	_check(again[0]["type"] == "build_failed", "can't queue the same building twice")
 	_check(city.queue.size() == 1, "queue still holds one granary")
-	_check(not Production.available_items(city).has("granary"), "queued building not offered again")
+	_check(not Production.available_items(state, city).has("granary"), "queued building not offered again")
 	city.production_box = 40
 	Production.process(state, city, 0)
 	_check(Array(city.buildings) == ["granary"], "granary is built")
-	_check(Production.can_enqueue(city, "granary") != "", "a built building can't be queued")
-	_check(not Production.available_items(city).has("granary"), "built building not offered")
-	_check(Production.available_items(city).has("warrior"), "units can always be queued again")
+	_check(Production.can_enqueue(state, city, "granary") != "", "a built building can't be queued")
+	_check(not Production.available_items(state, city).has("granary"), "built building not offered")
+	_check(Production.available_items(state, city).has("warrior"), "units can always be queued again")
 	GameActions.enqueue_build(state, city.id, "warrior")
 	GameActions.enqueue_build(state, city.id, "warrior")
 	_check(city.queue.size() == 2, "units may repeat in the queue")
@@ -266,12 +273,14 @@ func _test_round_trip_with_queues() -> void:
 		return
 	var city := state.cities[0]
 	city.buildings.append("granary")
+	_grant_all_techs(state)
 	GameActions.enqueue_build(state, city.id, "warrior")
 	GameActions.enqueue_build(state, city.id, "library")
+	_check(city.queue.size() == 2, "setup: warrior and library queued")
 	for turn in 3:
 		GameActions.end_turn(state)
 	var data := state.to_dict()
-	_check(int(data["version"]) == 3, "save version is 3")
+	_check(int(data["version"]) == GameState.VERSION, "save has the current version")
 	var loaded := GameState.from_dict(JSON.parse_string(JSON.stringify(data)))
 	var b := loaded.cities[0]
 	_check(b.queue == city.queue, "queue survives save (%s vs %s)" % [b.queue, city.queue])

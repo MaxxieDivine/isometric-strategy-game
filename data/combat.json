@@ -1,0 +1,9 @@
+{
+	"version": 1,
+	"comment": "Terrain defense lives in terrain.json (defense_percent); City Walls in buildings.json (effects.defense_percent, vs land units). Modifiers multiply.",
+	"max_hp": 10,
+	"fortified_defense_percent": 50,
+	"heal_in_field": 1,
+	"heal_in_city": 3,
+	"confirm_below_odds": 0.5
+}

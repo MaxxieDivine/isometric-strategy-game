@@ -1,10 +1,10 @@
 {
 	"version": 1,
 	"terrain": [
-		{ "id": "grassland", "sprite": "terrain_grassland", "name": "Grassland", "food": 2, "production": 0, "trade": 0, "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#4f9e3a" },
-		{ "id": "plains",    "sprite": "terrain_plains", "name": "Plains",    "food": 1, "production": 1, "trade": 0, "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#c2b04a" },
-		{ "id": "hills",     "sprite": "terrain_hills", "name": "Hills",     "food": 1, "production": 0, "trade": 0, "move_cost": 2, "passable_by_land": true,  "sight_bonus": 1, "placeholder_color": "#8c6a3e" },
-		{ "id": "forest",    "sprite": "terrain_forest", "name": "Forest",    "food": 1, "production": 2, "trade": 0, "move_cost": 2, "passable_by_land": true,  "sight_bonus": 0, "placeholder_color": "#2a5e2c" },
-		{ "id": "ocean",     "sprite": "terrain_ocean", "name": "Ocean",     "food": 1, "production": 0, "trade": 2, "move_cost": 1, "passable_by_land": false, "sight_bonus": 0, "placeholder_color": "#2f5fa8" }
+		{ "id": "grassland", "sprite": "terrain_grassland", "name": "Grassland", "food": 2, "production": 0, "trade": 0, "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "defense_percent": 0, "placeholder_color": "#4f9e3a" },
+		{ "id": "plains",    "sprite": "terrain_plains", "name": "Plains",    "food": 1, "production": 1, "trade": 0, "move_cost": 1, "passable_by_land": true,  "sight_bonus": 0, "defense_percent": 0, "placeholder_color": "#c2b04a" },
+		{ "id": "hills",     "sprite": "terrain_hills", "name": "Hills",     "food": 1, "production": 0, "trade": 0, "move_cost": 2, "passable_by_land": true,  "sight_bonus": 1, "defense_percent": 50, "placeholder_color": "#8c6a3e" },
+		{ "id": "forest",    "sprite": "terrain_forest", "name": "Forest",    "food": 1, "production": 2, "trade": 0, "move_cost": 2, "passable_by_land": true,  "sight_bonus": 0, "defense_percent": 25, "placeholder_color": "#2a5e2c" },
+		{ "id": "ocean",     "sprite": "terrain_ocean", "name": "Ocean",     "food": 1, "production": 0, "trade": 2, "move_cost": 1, "passable_by_land": false, "sight_bonus": 0, "defense_percent": 0, "placeholder_color": "#2f5fa8" }
 	]
 }

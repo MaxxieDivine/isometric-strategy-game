@@ -1,7 +1,7 @@
 class_name CityPanel
 extends PanelContainer
 ## City details: size, food box and growth, production and the build queue,
-## trade, citizens, and buildings.
+## unit upkeep, trade, citizens, and buildings.
 
 signal close_requested
 signal enqueue_requested(item_id: String)
@@ -26,6 +26,7 @@ var _build_grid: GridContainer
 var _buildings_label: Label
 var _trade_label: Label
 var _citizens_label: Label
+var _units_label: Label
 
 
 func _ready() -> void:
@@ -71,6 +72,7 @@ func _ready() -> void:
 	_build_grid.add_theme_constant_override("v_separation", 4)
 	box.add_child(_build_grid)
 
+	_units_label = _add_label(box, 15, Color.WHITE)
 	_trade_label = _add_label(box, 15, Color.WHITE)
 	_citizens_label = _add_label(box, 15, Color.WHITE)
 	_buildings_label = _add_label(box, 14, MUTED)
@@ -123,7 +125,8 @@ func _add_label(parent: Control, font_size: int, color: Color) -> Label:
 
 
 ## `info` keys: name, size, food_box, food_box_size, food_surplus, turns_to_grow,
-## production, production_box, trade, science, science_per_turn, working, idle,
+## production (after upkeep), production_box, upkeep, supported, free_units,
+## trade, science, science_per_turn, working, idle,
 ## queue (Array of names), current_cost (0 if nothing queued),
 ## turns_to_complete, blocked (reason or ""), available (Array of
 ## { id, name, cost, turns }), buildings (Array of names).
@@ -147,7 +150,16 @@ func show_city(info: Dictionary) -> void:
 		_food_label.add_theme_color_override("font_color", STARVING_COLOR)
 	_food_label.text = food
 
+	var upkeep: int = info["upkeep"]
 	_production_label.text = "Production   %s/turn   (%d stored)" % [_signed(info["production"]), info["production_box"]]
+	if upkeep > 0:
+		_production_label.text = "Production   %s/turn after %d upkeep   (%d stored)" % [
+			_signed(info["production"]), upkeep, info["production_box"]]
+	var supported: int = info["supported"]
+	_units_label.text = "Units   %d supported   ·   %d free" % [supported, info["free_units"]]
+	if upkeep > 0:
+		_units_label.text += "   ·   upkeep -%d production" % upkeep
+	_units_label.add_theme_color_override("font_color", WARNING_COLOR if upkeep > 0 else Color.WHITE)
 	_show_queue(info)
 	_trade_label.text = "Trade   %s/turn   ·   science %s/turn   (total %d)" % [
 		_signed(info["trade"]), _signed(info["science_per_turn"]), info["science"]]

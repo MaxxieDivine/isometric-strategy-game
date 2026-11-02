@@ -1,25 +1,49 @@
 class_name Hud
 extends Control
-## Turn/year display, End Turn and Found City buttons, key hints, a
-## notification card for batched turn news, and the idle-city prompt.
+## Top bar (research indicator, tech tree button, turn/year), End Turn,
+## Found City and Fortify buttons, key hints, a notification card for batched
+## turn news (with highlights and warnings; clickable when it points at a
+## place), the attack-odds tag, and the idle-city prompt.
 
 signal end_turn_requested
 signal found_city_requested
 signal end_turn_confirmed
 signal idle_city_jump_requested(city_id: int)
+signal research_clicked
+signal tech_tree_requested
+signal fortify_requested
+## The turn card was clicked while it pointed at a place on the map.
+signal notice_clicked
 
 const BUTTON_BG := Color(0.16, 0.14, 0.1, 0.95)
 const BUTTON_READY_BG := Color(0.55, 0.38, 0.1, 0.98)
 const NOTICE_BASE_TIME := 1.6
 const NOTICE_TIME_PER_LINE := 0.8
+## The turn card sits below the top bar.
+const NOTICE_TOP := 96
+const SCIENCE_COLOR := Color("#5aa6e0")
+const WARNING_COLOR := Color("#f2b84e")
+const DANGER_COLOR := Color("#ff7a5c")
+const ODDS_GOOD := Color("#9be06b")
+const ODDS_BAD := Color("#ff7a5c")
 
 var _turn_label: Label
 var _end_turn_button: Button
 var _found_city_button: Button
+var _fortify_button: Button
+var _notice_warnings: Label
+var _notice_clickable := false
+var _odds_tag: PanelContainer
+var _odds_label: Label
 var _hint_label: Label
 var _notice: PanelContainer
 var _notice_title: Label
 var _notice_lines: Label
+var _notice_highlights: Label
+var _research_panel: PanelContainer
+var _research_label: Label
+var _research_bar: ProgressBar
+var _research_pulse: Tween
 var _notice_tween: Tween
 var _pulse_tween: Tween
 var _turn_done := false
@@ -33,11 +57,22 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
+	var top_bar := HBoxContainer.new()
+	top_bar.add_theme_constant_override("separation", 6)
+	add_child(top_bar)
+	_build_research_indicator(top_bar)
+	var tree_button := Button.new()
+	tree_button.text = "Techs (T)"
+	tree_button.focus_mode = Control.FOCUS_NONE
+	tree_button.add_theme_font_size_override("font_size", 15)
+	_set_button_bg(tree_button, BUTTON_BG)
+	tree_button.pressed.connect(func() -> void: tech_tree_requested.emit())
+	top_bar.add_child(tree_button)
 	var turn_panel := PanelContainer.new()
 	turn_panel.add_theme_stylebox_override("panel", UiStyle.panel())
-	add_child(turn_panel)
-	turn_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
-	turn_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	top_bar.add_child(turn_panel)
+	top_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	top_bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_turn_label = Label.new()
 	_turn_label.add_theme_font_size_override("font_size", 18)
 	turn_panel.add_child(_turn_label)
@@ -47,6 +82,10 @@ func _ready() -> void:
 	_found_city_button = _make_button("Found City  (B)", 1)
 	_found_city_button.pressed.connect(func() -> void: found_city_requested.emit())
 	_found_city_button.hide()
+	_fortify_button = _make_button("Fortify  (F)", 1)
+	_fortify_button.pressed.connect(func() -> void: fortify_requested.emit())
+	_fortify_button.hide()
+	_build_odds_tag()
 
 	_hint_label = Label.new()
 	_hint_label.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -57,6 +96,80 @@ func _ready() -> void:
 
 	_build_notice()
 	_build_idle_prompt()
+
+
+## "Writing in 4 turns" over a progress bar; clicking opens the research picker.
+func _build_research_indicator(parent: Control) -> void:
+	_research_panel = PanelContainer.new()
+	_research_panel.add_theme_stylebox_override("panel", UiStyle.panel())
+	_research_panel.custom_minimum_size = Vector2(230, 0)
+	_research_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_research_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_research_panel.tooltip_text = "Choose research"
+	_research_panel.gui_input.connect(_on_research_input)
+	parent.add_child(_research_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 3)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_research_panel.add_child(box)
+	_research_label = Label.new()
+	_research_label.add_theme_font_size_override("font_size", 15)
+	_research_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(_research_label)
+	_research_bar = ProgressBar.new()
+	_research_bar.show_percentage = false
+	_research_bar.custom_minimum_size = Vector2(0, 8)
+	_research_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bar_bg := StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.03, 0.04, 0.06)
+	bar_bg.border_color = Color(0.3, 0.3, 0.3)
+	bar_bg.set_border_width_all(1)
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = SCIENCE_COLOR
+	_research_bar.add_theme_stylebox_override("background", bar_bg)
+	_research_bar.add_theme_stylebox_override("fill", bar_fill)
+	box.add_child(_research_bar)
+
+
+func _on_research_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+		research_clicked.emit()
+
+
+## `info` keys: tech_name ("" if nothing is being researched), stored, cost,
+## turns (-1 for no science), per_turn, done (true if every tech is known).
+func set_research(info: Dictionary) -> void:
+	if _research_pulse != null:
+		_research_pulse.kill()
+		_research_pulse = null
+	_research_panel.modulate = Color.WHITE
+	var per_turn: int = info["per_turn"]
+	_research_label.add_theme_color_override("font_color", Color.WHITE)
+	if bool(info["done"]):
+		_research_label.text = "All techs known   ·   +%d science" % per_turn
+		_research_bar.max_value = 1
+		_research_bar.value = 1
+		_research_panel.tooltip_text = ""
+		return
+	var tech_name: String = info["tech_name"]
+	if tech_name == "":
+		_research_label.text = "Choose research ▸"
+		_research_label.add_theme_color_override("font_color", WARNING_COLOR)
+		_research_bar.max_value = 1
+		_research_bar.value = 0
+		_research_panel.tooltip_text = "%d science stored   ·   +%d per turn" % [info["stored"], per_turn]
+		_research_pulse = create_tween().set_loops().set_trans(Tween.TRANS_SINE)
+		_research_pulse.tween_property(_research_panel, "modulate", Color(1.3, 1.2, 0.9), 0.5)
+		_research_pulse.tween_property(_research_panel, "modulate", Color.WHITE, 0.5)
+		return
+	var turns: int = info["turns"]
+	var eta := ("in %d turn%s" % [turns, "" if turns == 1 else "s"]) if turns > 0 else "(no science)"
+	_research_label.text = "%s %s" % [tech_name, eta]
+	_research_bar.max_value = maxi(1, int(info["cost"]))
+	_research_bar.value = mini(int(info["stored"]), int(info["cost"]))
+	_research_panel.tooltip_text = "%d / %d science   ·   +%d per turn\nClick to change research" % [
+		info["stored"], info["cost"], per_turn]
 
 
 ## A bottom-right button; `slot` 0 is the bottom one, higher slots stack upward.
@@ -81,9 +194,11 @@ func _build_notice() -> void:
 	_notice = PanelContainer.new()
 	_notice.add_theme_stylebox_override("panel", UiStyle.panel())
 	_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_notice.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_notice.gui_input.connect(_on_notice_input)
 	_notice.modulate.a = 0.0
 	add_child(_notice)
-	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
+	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, NOTICE_TOP)
 	_notice.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
@@ -93,6 +208,20 @@ func _build_notice() -> void:
 	_notice_title.add_theme_color_override("font_color", UiStyle.GOLD)
 	_notice_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_notice_title)
+	_notice_highlights = Label.new()
+	_notice_highlights.add_theme_font_size_override("font_size", 18)
+	_notice_highlights.add_theme_color_override("font_color", Color(1.0, 0.88, 0.45))
+	_notice_highlights.add_theme_color_override("font_outline_color", Color(0.35, 0.22, 0.0))
+	_notice_highlights.add_theme_constant_override("outline_size", 4)
+	_notice_highlights.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_notice_highlights)
+	_notice_warnings = Label.new()
+	_notice_warnings.add_theme_font_size_override("font_size", 17)
+	_notice_warnings.add_theme_color_override("font_color", DANGER_COLOR)
+	_notice_warnings.add_theme_color_override("font_outline_color", Color(0.25, 0.04, 0.0))
+	_notice_warnings.add_theme_constant_override("outline_size", 4)
+	_notice_warnings.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_notice_warnings)
 	_notice_lines = Label.new()
 	_notice_lines.add_theme_font_size_override("font_size", 15)
 	_notice_lines.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -193,21 +322,95 @@ func set_turn_done(done: bool) -> void:
 		_set_button_bg(_end_turn_button, BUTTON_BG)
 
 
-## Shows one notification card (replacing any current one): a title plus
-## optional lines of news. Stays up a little longer the more it says.
-func notify(title: String, lines: PackedStringArray = PackedStringArray()) -> void:
+## Shows one notification card (replacing any current one): a title, then
+## highlighted lines (good news, with a celebratory burst), warnings (threats),
+## then ordinary lines. Stays up a little longer the more it says.
+## `extras` keys (all optional): highlights, warnings (PackedStringArray),
+## celebrate (bool, default true), clickable (bool: emits notice_clicked).
+func notify(title: String, lines: PackedStringArray = PackedStringArray(), extras: Dictionary = {}) -> void:
+	var highlights: PackedStringArray = extras.get("highlights", PackedStringArray())
+	var warnings: PackedStringArray = extras.get("warnings", PackedStringArray())
+	_notice_clickable = bool(extras.get("clickable", false))
+	_notice.mouse_filter = Control.MOUSE_FILTER_STOP if _notice_clickable else Control.MOUSE_FILTER_IGNORE
 	_notice_title.text = title
+	_notice_highlights.text = "\n".join(highlights)
+	_notice_highlights.visible = not highlights.is_empty()
+	_notice_warnings.text = "\n".join(warnings) + ("\n(click to look)" if _notice_clickable else "")
+	_notice_warnings.visible = not warnings.is_empty()
 	_notice_lines.text = "\n".join(lines)
 	_notice_lines.visible = not lines.is_empty()
 	_notice.reset_size()
 	# Re-center after resizing.
-	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
+	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, NOTICE_TOP)
 	if _notice_tween != null:
 		_notice_tween.kill()
 	_notice.modulate.a = 1.0
 	_notice_tween = create_tween()
-	_notice_tween.tween_interval(NOTICE_BASE_TIME + NOTICE_TIME_PER_LINE * lines.size())
+	_notice_tween.tween_interval(NOTICE_BASE_TIME
+		+ NOTICE_TIME_PER_LINE * (lines.size() + 2 * highlights.size() + 3 * warnings.size()))
 	_notice_tween.tween_property(_notice, "modulate:a", 0.0, 0.4)
+	_notice_tween.tween_callback(func() -> void: _notice.mouse_filter = Control.MOUSE_FILTER_IGNORE)
+	if bool(extras.get("celebrate", true)) and not highlights.is_empty():
+		_celebrate()
+	elif not warnings.is_empty():
+		_shake_notice()
+
+
+func _on_notice_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if _notice_clickable and click != null and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+		notice_clicked.emit()
+
+
+## A short jolt so a warning card catches the eye.
+func _shake_notice() -> void:
+	var rest := _notice.position.x
+	var tween := create_tween()
+	for x: float in [8.0, -7.0, 5.0, -3.0, 0.0]:
+		tween.tween_property(_notice, "position:x", rest + x, 0.05)
+
+
+func set_fortify_visible(shown: bool) -> void:
+	_fortify_button.visible = shown
+
+
+# --- Attack odds ----------------------------------------------------------------
+
+func _build_odds_tag() -> void:
+	_odds_tag = PanelContainer.new()
+	var style := UiStyle.panel()
+	style.set_content_margin_all(5)
+	_odds_tag.add_theme_stylebox_override("panel", style)
+	_odds_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_odds_tag)
+	_odds_label = Label.new()
+	_odds_label.add_theme_font_size_override("font_size", 16)
+	_odds_tag.add_child(_odds_label)
+	_odds_tag.hide()
+
+
+## A small tag beside the mouse: "72% to win".
+func show_odds(text: String, favorable: bool, screen_pos: Vector2) -> void:
+	_odds_label.text = text
+	_odds_label.add_theme_color_override("font_color", ODDS_GOOD if favorable else ODDS_BAD)
+	_odds_tag.show()
+	_odds_tag.reset_size()
+	_odds_tag.position = screen_pos + Vector2(18, 10)
+
+
+func hide_odds() -> void:
+	_odds_tag.hide()
+
+
+## Pops the card, bursts gold from it, and flashes the research indicator.
+func _celebrate() -> void:
+	_notice.pivot_offset = _notice.size / 2.0
+	_notice.scale = Vector2.ONE * 0.8
+	create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT) \
+		.tween_property(_notice, "scale", Vector2.ONE, 0.25)
+	CelebrationBurst.play(self, _notice.position + _notice.size / 2.0, maxf(120.0, _notice.size.x * 0.6))
+	var indicator := _research_panel.get_global_rect().get_center() - get_global_position()
+	CelebrationBurst.play(self, indicator, 70.0)
 
 
 func _set_button_bg(button: Button, bg: Color) -> void:
