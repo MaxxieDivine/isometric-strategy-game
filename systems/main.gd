@@ -61,6 +61,8 @@ var _touch_mode := false
 ## Touch move preview: the tile tapped once (tap it again to go), or NO_CELL.
 var _touch_target := NO_CELL
 var _preview_path: Array[Vector2i] = []
+## R was pressed once mid-game; a second press starts a new world.
+var _new_world_armed := false
 
 
 func _enter_tree() -> void:
@@ -90,7 +92,7 @@ func _ready() -> void:
 	_build_touch_input()
 	_build_overlays()
 	_seed_picker.randomize()
-	_new_game(_seed_picker.randi())
+	_continue_or_new_game()
 
 
 func _build_overlays() -> void:
@@ -175,7 +177,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_select_unit(NO_UNIT)
 			_hide_tile_info()
 	elif event.is_action_pressed("regenerate_map"):
-		_new_game(_seed_picker.randi())
+		_request_new_world()
 	elif event is InputEventMouseButton and event.is_pressed():
 		var button := (event as InputEventMouseButton).button_index
 		var cell := map_view.world_to_grid(get_global_mouse_position())
@@ -195,8 +197,70 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # --- Game flow ----------------------------------------------------------------
 
+## Picks up the autosaved game if there is one, otherwise starts a new world.
+func _continue_or_new_game() -> void:
+	var saved := SaveSystem.load_game()
+	if saved == null:
+		_new_game(_seed_picker.randi())
+		return
+	_start_game(saved)
+	var units := state.units_of(PLAYER)
+	var focus := state.get_unit(_selected_unit)
+	if focus != null:
+		_look_at(focus.position)
+	elif not state.cities_of(PLAYER).is_empty():
+		_look_at(state.cities_of(PLAYER)[0].position)
+	elif not units.is_empty():
+		_look_at(units[0].position)
+	if not state.game_over.is_empty() and not Victory.is_continued(state):
+		_show_end_screen()
+	elif Research.current(state, PLAYER) == "":
+		_open_research_picker()
+	print("Continued saved game: turn %d" % state.turn)
+
+
 func _new_game(map_seed: int) -> void:
-	state = GameSetup.new_game(map_seed, MAP_WIDTH, MAP_HEIGHT)
+	_start_game(GameSetup.new_game(map_seed, MAP_WIDTH, MAP_HEIGHT))
+	var units := state.units_of(PLAYER)
+	if not units.is_empty():
+		_look_at(units[0].position)
+	_open_research_picker()
+	_autosave()
+	print("New game: seed %d, start %s" % [map_seed, units[0].position if not units.is_empty() else Vector2i(-1, -1)])
+
+
+## R on desktop. Once a game is under way it asks first, because the new world
+## replaces the autosave.
+func _request_new_world() -> void:
+	if state.turn > 1 and not _new_world_armed:
+		_new_world_armed = true
+		hud.notify("Start a new world?", PackedStringArray(["Press R again to replace this game"]))
+		return
+	_new_world_armed = false
+	_new_game(_seed_picker.randi())
+
+
+func _look_at(cell: Vector2i) -> void:
+	camera.look_at_world(map_view.grid_to_world(cell), TOUCH_START_ZOOM if _touch_mode else START_ZOOM)
+
+
+func _autosave() -> void:
+	if state != null:
+		SaveSystem.save(state)
+
+
+func _notification(what: int) -> void:
+	# Phones and browsers can close the game from the background without
+	# warning, so save whenever it loses focus or is asked to close.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST \
+			or what == NOTIFICATION_APPLICATION_PAUSED:
+		_autosave()
+
+
+## Resets the view and shows `new_state` (a new world or a loaded save).
+func _start_game(new_state: GameState) -> void:
+	state = new_state
+	_new_world_armed = false
 	units_layer.clear_units()
 	cities_layer.clear_cities()
 	camps_layer.clear()
@@ -220,13 +284,7 @@ func _new_game(map_seed: int) -> void:
 	# The seed is printed to the console (see below); the hint stays short enough to clear the buttons.
 	hud.set_hint(_hint_text())
 	_refresh_world()
-	var units := state.units_of(PLAYER)
-	if not units.is_empty():
-		camera.look_at_world(map_view.grid_to_world(units[0].position),
-			TOUCH_START_ZOOM if _touch_mode else START_ZOOM)
 	_select_next_unit()
-	_open_research_picker()
-	print("New game: seed %d, start %s" % [map_seed, units[0].position if not units.is_empty() else Vector2i(-1, -1)])
 
 
 ## End Turn: if a city has nothing to build, ask first (pressing End Turn
@@ -250,11 +308,13 @@ func _confirm_end_turn() -> void:
 		_show_end_screen()
 		return
 	hud.hide_idle_prompt()
+	_new_world_armed = false
 	# Ending the turn moves past any celebration still on screen.
 	wonder_card.clear()
 	_apply_events(GameActions.end_turn(state))
 	_selected_unit = NO_UNIT
 	_select_next_unit()
+	_autosave()
 
 
 func _skip_selected_unit() -> void:
@@ -652,6 +712,7 @@ func _show_end_screen() -> void:
 func _keep_playing() -> void:
 	end_screen.hide()
 	_apply_events(GameActions.keep_playing(state))
+	_autosave()
 
 
 func _end_screen_info() -> Dictionary:
