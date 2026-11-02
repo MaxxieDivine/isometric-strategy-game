@@ -59,7 +59,7 @@ func _ready() -> void:
 	_effect_label.custom_minimum_size = Vector2(CARD_WIDTH - 44.0, 0)
 	_place_label = _label(box, 14, Color(0.8, 0.78, 0.7))
 	var hint := _label(box, 12, Color(0.6, 0.58, 0.5))
-	hint.text = "click to continue"
+	hint.text = "%s to continue" % UiText.click().to_lower()
 	hide()
 
 
