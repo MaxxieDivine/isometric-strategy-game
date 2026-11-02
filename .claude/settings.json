@@ -30,14 +30,26 @@
       "Bash(git log *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-
-      "mcp__godot"
-    ],
-    "deny": [
       "PowerShell(git push)",
       "PowerShell(git push *)",
       "Bash(git push)",
       "Bash(git push *)",
+
+      "mcp__godot"
+    ],
+    "deny": [
+      "PowerShell(git push *--force*)",
+      "PowerShell(git push -f)",
+      "PowerShell(git push -f *)",
+      "PowerShell(git push * -f)",
+      "PowerShell(git push * -f *)",
+      "PowerShell(git push *+*)",
+      "Bash(git push *--force*)",
+      "Bash(git push -f)",
+      "Bash(git push -f *)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git push *+*)",
 
       "PowerShell(Remove-Item *:\\*)",
       "PowerShell(Remove-Item *:/*)",
