@@ -53,6 +53,11 @@ var _visible := PackedByteArray()
 var _pending_attack := NO_CELL
 
 
+func _enter_tree() -> void:
+	# Runs before the UI children build their labels.
+	SymbolFont.install()
+
+
 func _ready() -> void:
 	InputActions.ensure_defaults()
 	hud.end_turn_requested.connect(_end_turn)

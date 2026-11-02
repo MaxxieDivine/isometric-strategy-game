@@ -4,3 +4,6 @@
 
 # Runtime save files
 /saves/
+
+# Local export output
+/build/

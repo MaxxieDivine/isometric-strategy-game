@@ -1,0 +1,78 @@
+# Builds the Web export and publishes it to GitHub Pages on every push to main.
+# One-time setup: Settings -> Pages -> Source -> "GitHub Actions".
+name: Deploy web build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only the newest push deploys; an older run still building is cancelled.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # Keep in step with the editor version used on the PC.
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Godot and web templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-web-nothreads
+
+      - name: Download Godot and web templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable"
+          mkdir -p "$HOME/godot"
+          curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d "$HOME/godot"
+          mv "$HOME/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$HOME/godot/godot"
+          # The full template archive is ~1 GB; keep only the single-threaded web ones.
+          curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q /tmp/templates.tpz 'templates/web_nothreads_*' templates/version.txt -d /tmp
+          dest="$HOME/.local/share/godot/export_templates/$(cat /tmp/templates/version.txt)"
+          mkdir -p "$dest"
+          mv /tmp/templates/* "$dest/"
+          rm /tmp/godot.zip /tmp/templates.tpz
+
+      - name: Run tests
+        run: GODOT="$HOME/godot/godot" tools/run_tests.sh
+
+      - name: Export web build
+        run: |
+          mkdir -p build/web
+          "$HOME/godot/godot" --headless --export-release Web build/web/index.html
+          test -f build/web/index.wasm
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
