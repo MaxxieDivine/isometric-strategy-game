@@ -42,6 +42,11 @@ Weigh every feature, system, and UI change against these. If a change works agai
 - `view/sprite_library.gd` resolves a key to `res://assets/sprites/<key>.png`. When no file exists, the view draws a code-generated placeholder from `view/placeholder_art.gd`. To add real art, drop in the PNG; no code changes needed.
 - All placeholder drawing stays in the view layer.
 
+## Web build
+- `export_presets.cfg` has a single-threaded "Web" preset (no special server headers needed). `.github/workflows/deploy-web.yml` runs the tests, exports it and publishes it to GitHub Pages on every push to `main`. Keep its `GODOT_VERSION` in step with the editor.
+- The page carries a `noindex` meta tag; the URL is shared, not advertised.
+- Browsers have no system fonts to fall back on, so any symbol missing from Godot's built-in font draws as a box. `ui/symbol_font.gd` adds the bundled `assets/fonts/DejaVuSans.ttf` as a fallback; check new symbols in the web build.
+
 ## Isometric conventions
 - Map data uses logical grid coordinates (`Vector2i`). Isometric projection (grid to screen and back) happens only in the view layer, in one place.
 - Logic code never deals with pixel or screen coordinates.
@@ -66,6 +71,6 @@ tests/      # headless tests for core/
 ## Testing
 - `core/` logic must be testable headless (`godot --headless`). When adding rules, add or update tests that run turn processing on plain data with no scenes.
 - Check save/load round-trips: `from_dict(to_dict(state))` should give an identical state.
-- Run all tests with `.\tools\run_tests.ps1`, or a subset with `.\tools\run_tests.ps1 cities`. It reimports first, which refreshes the global class cache after new `class_name` scripts, then runs every suite and exits 1 on any failure.
+- Run all tests with `.\tools\run_tests.ps1`, or a subset with `.\tools\run_tests.ps1 cities`. It reimports first, which refreshes the global class cache after new `class_name` scripts, then runs every suite and exits 1 on any failure. On Linux/macOS (and in CI) use `tools/run_tests.sh [filter]` with `GODOT` pointing at the Godot binary.
 - Each `tests/test_*.gd` is a standalone `SceneTree` script that exits with code 1 on failure. A single suite can also be run directly:
   `D:\Tools\Godot\Godot_v4.7.2-stable_win64_console.exe --headless --path . --script res://tests/test_units.gd`
