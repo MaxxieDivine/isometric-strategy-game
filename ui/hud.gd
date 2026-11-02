@@ -1,7 +1,7 @@
 class_name Hud
 extends Control
 ## Top bar (research indicator, tech tree button, turn/year), End Turn,
-## Found City and Fortify buttons, key hints, a notification card for batched
+## Found City, Fortify and Skip buttons, key hints, a notification card for batched
 ## turn news (with highlights and warnings; clickable when it points at a
 ## place), the attack-odds tag, and the idle-city prompt.
 
@@ -12,6 +12,7 @@ signal idle_city_jump_requested(city_id: int)
 signal research_clicked
 signal tech_tree_requested
 signal fortify_requested
+signal skip_requested
 ## The turn card was clicked while it pointed at a place on the map.
 signal notice_clicked
 
@@ -35,6 +36,9 @@ var _shown_score := -1
 var _end_turn_button: Button
 var _found_city_button: Button
 var _fortify_button: Button
+var _skip_button: Button
+var _tree_button: Button
+var _touch_mode := false
 var _notice_warnings: Label
 var _notice_clickable := false
 var _odds_tag: PanelContainer
@@ -66,13 +70,13 @@ func _ready() -> void:
 	add_child(top_bar)
 	_build_score_indicator(top_bar)
 	_build_research_indicator(top_bar)
-	var tree_button := Button.new()
-	tree_button.text = "Techs (T)"
-	tree_button.focus_mode = Control.FOCUS_NONE
-	tree_button.add_theme_font_size_override("font_size", 15)
-	_set_button_bg(tree_button, BUTTON_BG)
-	tree_button.pressed.connect(func() -> void: tech_tree_requested.emit())
-	top_bar.add_child(tree_button)
+	_tree_button = Button.new()
+	_tree_button.text = "Techs (T)"
+	_tree_button.focus_mode = Control.FOCUS_NONE
+	_tree_button.add_theme_font_size_override("font_size", 15)
+	_set_button_bg(_tree_button, BUTTON_BG)
+	_tree_button.pressed.connect(func() -> void: tech_tree_requested.emit())
+	top_bar.add_child(_tree_button)
 	var turn_panel := PanelContainer.new()
 	turn_panel.add_theme_stylebox_override("panel", UiStyle.panel())
 	top_bar.add_child(turn_panel)
@@ -99,6 +103,9 @@ func _ready() -> void:
 	_fortify_button = _make_button("Fortify  (F)", 1)
 	_fortify_button.pressed.connect(func() -> void: fortify_requested.emit())
 	_fortify_button.hide()
+	_skip_button = _make_button("Skip  (Space)", 2)
+	_skip_button.pressed.connect(func() -> void: skip_requested.emit())
+	_skip_button.hide()
 	_build_odds_tag()
 
 	_hint_label = Label.new()
@@ -379,7 +386,7 @@ func set_turn_done(done: bool) -> void:
 		_pulse_tween.kill()
 	_end_turn_button.modulate = Color.WHITE
 	if done:
-		_end_turn_button.text = "End Turn  ⏎"
+		_end_turn_button.text = "End Turn" if _touch_mode else "End Turn  ⏎"
 		_set_button_bg(_end_turn_button, BUTTON_READY_BG)
 		_pulse_tween = create_tween().set_loops().set_trans(Tween.TRANS_SINE)
 		_pulse_tween.tween_property(_end_turn_button, "modulate", Color(1.35, 1.25, 1.0), 0.6)
@@ -402,7 +409,7 @@ func notify(title: String, lines: PackedStringArray = PackedStringArray(), extra
 	_notice_title.text = title
 	_notice_highlights.text = "\n".join(highlights)
 	_notice_highlights.visible = not highlights.is_empty()
-	_notice_warnings.text = "\n".join(warnings) + ("\n(click to look)" if _notice_clickable else "")
+	_notice_warnings.text = "\n".join(warnings) + ("\n(%s to look)" % UiText.click().to_lower() if _notice_clickable else "")
 	_notice_warnings.visible = not warnings.is_empty()
 	_notice_lines.text = "\n".join(lines)
 	_notice_lines.visible = not lines.is_empty()
@@ -441,6 +448,23 @@ func set_fortify_visible(shown: bool) -> void:
 	_fortify_button.visible = shown
 
 
+func set_skip_visible(shown: bool) -> void:
+	_skip_button.visible = shown
+
+
+## On a touch screen the buttons drop their keyboard shortcuts.
+func set_touch_mode(enabled: bool) -> void:
+	if enabled == _touch_mode:
+		return
+	_touch_mode = enabled
+	_found_city_button.text = "Found City" if enabled else "Found City  (B)"
+	_fortify_button.text = "Fortify" if enabled else "Fortify  (F)"
+	_skip_button.text = "Skip" if enabled else "Skip  (Space)"
+	_tree_button.text = "Techs" if enabled else "Techs (T)"
+	if not _turn_done:
+		_end_turn_button.text = "End Turn"
+
+
 # --- Attack odds ----------------------------------------------------------------
 
 func _build_odds_tag() -> void:
@@ -462,7 +486,21 @@ func show_odds(text: String, favorable: bool, screen_pos: Vector2) -> void:
 	_odds_label.add_theme_color_override("font_color", ODDS_GOOD if favorable else ODDS_BAD)
 	_odds_tag.show()
 	_odds_tag.reset_size()
-	_odds_tag.position = screen_pos + Vector2(18, 10)
+	_odds_tag.position = _clamped_tag_position(screen_pos + Vector2(18, 10))
+
+
+## The touch move preview's tag: "Tap again to move · 2 turns".
+func show_move_tag(text: String, screen_pos: Vector2) -> void:
+	_odds_label.text = text
+	_odds_label.add_theme_color_override("font_color", UiStyle.GOLD)
+	_odds_tag.show()
+	_odds_tag.reset_size()
+	_odds_tag.position = _clamped_tag_position(screen_pos + Vector2(18, 10))
+
+
+func _clamped_tag_position(pos: Vector2) -> Vector2:
+	var limit := size - _odds_tag.size - Vector2(4, 4)
+	return Vector2(clampf(pos.x, 4.0, maxf(4.0, limit.x)), clampf(pos.y, 4.0, maxf(4.0, limit.y)))
 
 
 func hide_odds() -> void:

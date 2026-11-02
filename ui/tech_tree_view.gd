@@ -74,7 +74,8 @@ func _ready() -> void:
 	box.add_child(_canvas)
 
 	var hint := Label.new()
-	hint.text = "Click an available tech to research it   ·   T or Esc to close"
+	hint.text = ("Tap an available tech to research it" if UiText.touch
+		else "Click an available tech to research it   ·   T or Esc to close")
 	hint.add_theme_font_size_override("font_size", 12)
 	hint.add_theme_color_override("font_color", MUTED)
 	box.add_child(hint)

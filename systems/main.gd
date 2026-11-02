@@ -51,11 +51,19 @@ var _card_jump := NO_CELL
 var _visible := PackedByteArray()
 ## A risky attack waiting for its confirming click, or NO_CELL.
 var _pending_attack := NO_CELL
+## Touch play: taps, drags and pinches on the map.
+var touch_gestures: TouchGestures
+## The player is on a touch screen (set by the first touch, or up front on phones).
+var _touch_mode := false
+## Touch move preview: the tile tapped once (tap it again to go), or NO_CELL.
+var _touch_target := NO_CELL
+var _preview_path: Array[Vector2i] = []
 
 
 func _enter_tree() -> void:
 	# Runs before the UI children build their labels.
 	SymbolFont.install()
+	UiText.touch = UiText.is_touch_device()
 
 
 func _ready() -> void:
@@ -75,6 +83,8 @@ func _ready() -> void:
 	tech_tree.close_requested.connect(tech_tree.hide)
 	hud.fortify_requested.connect(_fortify_selected_unit)
 	hud.notice_clicked.connect(_jump_to_card_place)
+	hud.skip_requested.connect(_skip_selected_unit)
+	_build_touch_input()
 	_build_overlays()
 	_seed_picker.randomize()
 	_new_game(_seed_picker.randi())
@@ -98,10 +108,43 @@ func _build_overlays() -> void:
 	end_screen.keep_playing_requested.connect(_keep_playing)
 
 
+func _build_touch_input() -> void:
+	touch_gestures = TouchGestures.new()
+	add_child(touch_gestures)
+	touch_gestures.touch_seen.connect(_enter_touch_mode)
+	touch_gestures.tapped.connect(_on_tap)
+	touch_gestures.long_pressed.connect(_on_long_press)
+	touch_gestures.dragged.connect(camera.pan_screen)
+	touch_gestures.pinched.connect(camera.zoom_screen)
+	if UiText.touch:
+		_enter_touch_mode()
+
+
+func _enter_touch_mode() -> void:
+	if _touch_mode:
+		return
+	_touch_mode = true
+	UiText.touch = true
+	camera.edge_pan_enabled = false
+	hud.set_touch_mode(true)
+	hud.hide_odds()
+	hud.set_hint(_hint_text())
+
+
+func _hint_text() -> String:
+	if _touch_mode:
+		return "Tap: select   ·   Tap a tile twice: move/attack   ·   Hold: move onto your units   ·   Drag: pan   ·   Pinch: zoom"
+	return "B: found city   ·   F: fortify   ·   Space: skip   ·   Enter: end turn   ·   Right-click: move/attack   ·   T: techs   ·   R: new world"
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if end_screen.visible:
 		# The end screen has its own buttons; the map waits behind it.
 		get_viewport().set_input_as_handled()
+		return
+	var mouse := event as InputEventMouse
+	if mouse != null and mouse.device == InputEvent.DEVICE_ID_EMULATION:
+		# A touch dressed up as a mouse: TouchGestures already handles it.
 		return
 	if event.is_action_pressed("deselect") and wonder_card.is_showing():
 		wonder_card.dismiss()
@@ -171,7 +214,7 @@ func _new_game(map_seed: int) -> void:
 	var bounds := map_view.get_grid_world_rect(MAP_WIDTH, MAP_HEIGHT).grow_individual(-half.x, -half.y, -half.x, -half.y)
 	camera.set_bounds(bounds)
 	# The seed is printed to the console (see below); the hint stays short enough to clear the buttons.
-	hud.set_hint("B: found city   ·   F: fortify   ·   Space: skip   ·   Enter: end turn   ·   Right-click: move/attack   ·   T: techs   ·   R: new world")
+	hud.set_hint(_hint_text())
 	_refresh_world()
 	var units := state.units_of(PLAYER)
 	if not units.is_empty():
@@ -234,18 +277,20 @@ func _fortify_selected_unit() -> void:
 	_select_next_unit()
 
 
-func _order_move(cell: Vector2i) -> void:
+## `confirmed`: the player already saw the odds (a touch preview), so a
+## long-shot attack doesn't ask again.
+func _order_move(cell: Vector2i, confirmed: bool = false) -> void:
 	var unit := state.get_unit(_selected_unit)
 	if unit == null or not state.map.in_bounds(cell):
 		return
 	# Long-shot attacks need a second click on the same target.
 	var defender := _visible_defender(unit, cell)
-	if defender != null and Combat.can_attack(unit):
+	if defender != null and Combat.can_attack(unit) and not confirmed:
 		var odds := Combat.win_odds(state, unit, defender)
 		if odds < Combat.confirm_below_odds() and _pending_attack != cell:
 			_pending_attack = cell
 			hud.notify("Only %d%% to win" % roundi(odds * 100.0),
-				PackedStringArray(["Click the %s again to attack anyway" % _unit_name(defender)]))
+				PackedStringArray(["%s the %s again to attack anyway" % [UiText.click(), _unit_name(defender)]]))
 			return
 	_pending_attack = NO_CELL
 	_apply_events(GameActions.move_unit(state, unit.id, cell))
@@ -255,7 +300,84 @@ func _order_move(cell: Vector2i) -> void:
 		_select_next_unit()
 
 
-func _on_left_click(cell: Vector2i) -> void:
+# --- Touch ----------------------------------------------------------------------
+
+func _on_tap(screen_pos: Vector2) -> void:
+	var cell := map_view.world_to_grid(_screen_to_world(screen_pos))
+	if cell != _touch_target:
+		_clear_preview()
+	_on_left_click(cell, true)
+
+
+## A long press is the touch right-click: move there now, even onto your own
+## units or city. With nothing selected it shows what's on the tile.
+func _on_long_press(screen_pos: Vector2) -> void:
+	var cell := map_view.world_to_grid(_screen_to_world(screen_pos))
+	_clear_preview()
+	if state.get_unit(_selected_unit) == null:
+		if state.map.in_bounds(cell):
+			_show_tile_info(cell)
+		return
+	_order_move(cell)
+
+
+func _screen_to_world(screen_pos: Vector2) -> Vector2:
+	return get_viewport().get_canvas_transform().affine_inverse() * screen_pos
+
+
+func _world_to_screen(world_pos: Vector2) -> Vector2:
+	return get_viewport().get_canvas_transform() * world_pos
+
+
+## First tap on a destination: draw the route and say what a second tap does.
+func _preview_move(unit: UnitState, cell: Vector2i) -> void:
+	var path := Pathfinder.find_path(state.map, state.explored[PLAYER], unit.position, cell,
+		UnitDefs.domain(unit.type))
+	if path.is_empty():
+		_clear_preview()
+		hud.notify("No known route there")
+		return
+	_touch_target = cell
+	_preview_path = path
+	_refresh_paths()
+	_update_move_tag()
+
+
+func _update_move_tag() -> void:
+	var unit := state.get_unit(_selected_unit)
+	if _touch_target == NO_CELL or unit == null:
+		return
+	var at := _world_to_screen(map_view.grid_to_world(_touch_target))
+	var defender := _visible_defender(unit, _touch_target)
+	if defender != null and Combat.can_attack(unit):
+		var odds := Combat.win_odds(state, unit, defender)
+		hud.show_odds("%d%% to win   ·   tap again to attack" % roundi(odds * 100.0),
+			odds >= Combat.confirm_below_odds(), at)
+		return
+	var turns := Movement.turns_along(unit, _preview_path, state.map, state.explored[PLAYER])
+	var arrive := turns[turns.size() - 1] + 1 if not turns.is_empty() else 1
+	var text := "Tap again to move"
+	if arrive > 1:
+		text += "   ·   %d turns" % arrive
+	hud.show_move_tag(text, at)
+
+
+func _clear_preview() -> void:
+	if _touch_target == NO_CELL:
+		return
+	_touch_target = NO_CELL
+	_preview_path.clear()
+	hud.hide_odds()
+	_refresh_paths()
+
+
+func _process(_delta: float) -> void:
+	# Keep the "tap again" tag on its tile while the map pans and zooms.
+	if _touch_target != NO_CELL:
+		_update_move_tag()
+
+
+func _on_left_click(cell: Vector2i, from_touch: bool = false) -> void:
 	if not state.map.in_bounds(cell):
 		_close_city()
 		_hide_tile_info()
@@ -291,7 +413,11 @@ func _on_left_click(cell: Vector2i) -> void:
 			_select_unit(here[(index + 1) % here.size()].id)
 			return
 	elif selected != null:
-		_order_move(cell)
+		if from_touch and cell != _touch_target:
+			_preview_move(selected, cell)
+			return
+		_clear_preview()
+		_order_move(cell, from_touch)
 		return
 	_show_tile_info(cell)
 
@@ -319,6 +445,7 @@ func _select_next_unit() -> void:
 
 
 func _select_unit(unit_id: int) -> void:
+	_clear_preview()
 	if unit_id != NO_UNIT:
 		_close_city()
 	_selected_unit = unit_id
@@ -330,6 +457,7 @@ func _select_unit(unit_id: int) -> void:
 		info_panel.hide()
 	hud.set_found_city_visible(unit != null and UnitDefs.can_found_city(unit.type))
 	hud.set_fortify_visible(unit != null and not UnitDefs.can_found_city(unit.type) and not unit.fortified)
+	hud.set_skip_visible(unit != null and unit.needs_orders())
 	_pending_attack = NO_CELL
 	units_layer.sync(state, _selected_unit, map_view, PLAYER, _visible)
 	_update_attack_odds()
@@ -634,8 +762,9 @@ func _open_research_picker() -> void:
 		title = "Choose research"
 	research_picker.open({
 		"title": title,
-		"subtitle": "+%d science/turn   ·   %d stored   ·   Esc picks the cheapest" % [
-			Research.science_per_turn(state, PLAYER), Research.stored(state, PLAYER)],
+		"subtitle": "+%d science/turn   ·   %d stored   ·   %s picks the cheapest" % [
+			Research.science_per_turn(state, PLAYER), Research.stored(state, PLAYER),
+			"Closing" if _touch_mode else "Esc"],
 		"current": current,
 		"options": options,
 	})
@@ -720,7 +849,7 @@ func _apply_events(events: Array[Dictionary]) -> void:
 				hud.notify(event["reason"])
 			"city_founded":
 				var city := state.get_city(event["city_id"])
-				hud.notify("%s is founded!" % city.name, PackedStringArray(["Click the city to choose what to build"]))
+				hud.notify("%s is founded!" % city.name, PackedStringArray(["%s the city to choose what to build" % UiText.click()]))
 			"build_failed", "research_failed":
 				hud.notify(event["reason"])
 			"game_continued":
@@ -808,7 +937,18 @@ func _refresh_paths() -> void:
 			"start": map_view.grid_to_world(unit.position),
 			"points": points,
 			"turns": Movement.path_turns(unit, state.map, state.explored[unit.owner]),
-			"active": unit.id == _selected_unit,
+			"active": unit.id == _selected_unit and _touch_target == NO_CELL,
+		})
+	var selected := state.get_unit(_selected_unit)
+	if _touch_target != NO_CELL and selected != null and not _preview_path.is_empty():
+		var preview := PackedVector2Array()
+		for cell in _preview_path:
+			preview.append(map_view.grid_to_world(cell))
+		paths.append({
+			"start": map_view.grid_to_world(selected.position),
+			"points": preview,
+			"turns": Movement.turns_along(selected, _preview_path, state.map, state.explored[PLAYER]),
+			"active": true,
 		})
 	path_overlay.show_paths(paths)
 
@@ -838,10 +978,14 @@ func _show_unit_info(unit: UnitState) -> void:
 		details += "\n%s at (%d, %d)" % [terrain["name"], unit.position.x, unit.position.y]
 		if UnitDefs.can_found_city(unit.type):
 			var reason := CityRules.can_found(state, unit)
-			details += "\n" + ("Press B to found a city here" if reason == "" else reason)
+			details += "\n" + (_found_city_hint() if reason == "" else reason)
 		elif not unit.fortified:
-			details += "\nF: fortify   ·   Right-click an enemy to attack"
+			details += "\nTap an enemy twice to attack" if _touch_mode else "\nF: fortify   ·   Right-click an enemy to attack"
 	info_panel.show_info(def["name"], details, Color.html(state.players[unit.owner]["color"]))
+
+
+func _found_city_hint() -> String:
+	return "Tap Found City to settle here" if _touch_mode else "Press B to found a city here"
 
 
 func _show_tile_info(cell: Vector2i) -> void:
@@ -881,6 +1025,9 @@ func _visible_defender(unit: UnitState, cell: Vector2i) -> UnitState:
 ## "72% to win" beside the mouse while a combat unit is selected and the
 ## mouse is over a visible enemy.
 func _update_attack_odds() -> void:
+	if _touch_mode:
+		# No hover on touch: the move preview shows the odds instead.
+		return
 	var unit := state.get_unit(_selected_unit) if state != null else null
 	if unit == null or not Combat.can_attack(unit):
 		hud.hide_odds()

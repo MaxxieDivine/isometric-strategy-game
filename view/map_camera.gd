@@ -24,6 +24,8 @@ var _target_zoom := 1.0
 var _zoom_anchor := Vector2.ZERO
 var _mouse_in_window := false
 var _glide: Tween
+## Off on touch screens, where a finger near the edge isn't a request to pan.
+var edge_pan_enabled := true
 
 
 func _ready() -> void:
@@ -57,6 +59,23 @@ func ensure_visible(world_pos: Vector2) -> void:
 	_stop_glide()
 	_glide = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_glide.tween_property(self, "position", _clamped(world_pos), GLIDE_TIME)
+
+
+## Moves the view by a finger drag: the map follows the finger.
+func pan_screen(delta: Vector2) -> void:
+	_stop_glide()
+	position -= delta / zoom.x
+	_clamp_position()
+
+
+## Pinch zoom: scales by `factor` and keeps the point under `anchor` in place.
+func zoom_screen(factor: float, anchor: Vector2) -> void:
+	_stop_glide()
+	var before := _viewport_to_world(anchor)
+	_target_zoom = clampf(zoom.x * factor, _min_zoom, MAX_ZOOM)
+	zoom = Vector2.ONE * _target_zoom
+	position += before - _viewport_to_world(anchor)
+	_clamp_position()
 
 
 func _stop_glide() -> void:
@@ -101,7 +120,7 @@ func _zoom_toward(factor: float, viewport_pos: Vector2) -> void:
 
 
 func _edge_pan_direction() -> Vector2:
-	if not _mouse_in_window or not get_window().has_focus():
+	if not edge_pan_enabled or not _mouse_in_window or not get_window().has_focus():
 		return Vector2.ZERO
 	var size := get_viewport_rect().size
 	var mouse := get_viewport().get_mouse_position()

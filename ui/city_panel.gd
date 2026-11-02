@@ -86,7 +86,7 @@ func _ready() -> void:
 	_wonders_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	var hint := _add_label(box, 12, Color(0.6, 0.62, 0.68))
-	hint.text = "Click a tile in the city radius to move a citizen there. Click a worked tile to free it."
+	hint.text = "{0} a tile in the city radius to move a citizen there. {0} a worked tile to free it.".format([UiText.click()])
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 	hide()

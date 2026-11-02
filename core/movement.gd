@@ -36,12 +36,18 @@ static func path_cost(map: MapState, explored: PackedByteArray, path: Array[Vect
 ## For each step of the unit's planned path, the turn it arrives there
 ## (0 = this turn, 1 = next turn, ...).
 static func path_turns(unit: UnitState, map: MapState, explored: PackedByteArray) -> Array[int]:
+	return turns_along(unit, unit.path, map, explored)
+
+
+## Like path_turns, for a route the unit hasn't been given yet (a preview).
+static func turns_along(unit: UnitState, path: Array[Vector2i], map: MapState,
+		explored: PackedByteArray) -> Array[int]:
 	var turns: Array[int] = []
 	var max_moves := unit.max_moves()
 	var moves_left := unit.moves_left
 	var turn := 0
 	var domain := UnitDefs.domain(unit.type)
-	for cell in unit.path:
+	for cell in path:
 		var cost := enter_cost(map, explored, cell, domain)
 		if not can_enter(moves_left, max_moves, cost):
 			turn += 1
