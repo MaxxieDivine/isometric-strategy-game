@@ -26,6 +26,8 @@ var _mouse_in_window := false
 var _glide: Tween
 ## Off on touch screens, where a finger near the edge isn't a request to pan.
 var edge_pan_enabled := true
+## Closest zoom allowed; raised on touch screens so tiles fit a fingertip.
+var max_zoom := MAX_ZOOM
 
 
 func _ready() -> void:
@@ -38,14 +40,14 @@ func _ready() -> void:
 func set_bounds(bounds: Rect2) -> void:
 	_bounds = bounds
 	_update_min_zoom()
-	_target_zoom = clampf(_target_zoom, _min_zoom, MAX_ZOOM)
+	_target_zoom = clampf(_target_zoom, _min_zoom, max_zoom)
 	zoom = Vector2.ONE * _target_zoom
 	_clamp_position()
 
 
 func look_at_world(world_pos: Vector2, new_zoom: float = 1.0) -> void:
 	_stop_glide()
-	_target_zoom = clampf(new_zoom, _min_zoom, MAX_ZOOM)
+	_target_zoom = clampf(new_zoom, _min_zoom, max_zoom)
 	zoom = Vector2.ONE * _target_zoom
 	position = world_pos
 	_clamp_position()
@@ -72,7 +74,7 @@ func pan_screen(delta: Vector2) -> void:
 func zoom_screen(factor: float, anchor: Vector2) -> void:
 	_stop_glide()
 	var before := _viewport_to_world(anchor)
-	_target_zoom = clampf(zoom.x * factor, _min_zoom, MAX_ZOOM)
+	_target_zoom = clampf(zoom.x * factor, _min_zoom, max_zoom)
 	zoom = Vector2.ONE * _target_zoom
 	position += before - _viewport_to_world(anchor)
 	_clamp_position()
@@ -114,7 +116,7 @@ func _process(delta: float) -> void:
 
 
 func _zoom_toward(factor: float, viewport_pos: Vector2) -> void:
-	_target_zoom = clampf(_target_zoom * factor, _min_zoom, MAX_ZOOM)
+	_target_zoom = clampf(_target_zoom * factor, _min_zoom, max_zoom)
 	_zoom_anchor = viewport_pos
 	get_viewport().set_input_as_handled()
 
@@ -145,7 +147,7 @@ func _update_min_zoom() -> void:
 		return
 	var size := get_viewport_rect().size
 	var fit := minf(size.x / _bounds.size.x, size.y / _bounds.size.y)
-	_min_zoom = clampf(fit, MIN_ZOOM_FLOOR, MAX_ZOOM)
+	_min_zoom = clampf(fit, MIN_ZOOM_FLOOR, max_zoom)
 
 
 func _clamp_position() -> void:
@@ -168,6 +170,6 @@ func _clamped(pos: Vector2) -> Vector2:
 
 func _on_viewport_resized() -> void:
 	_update_min_zoom()
-	_target_zoom = clampf(_target_zoom, _min_zoom, MAX_ZOOM)
-	zoom = Vector2.ONE * clampf(zoom.x, _min_zoom, MAX_ZOOM)
+	_target_zoom = clampf(_target_zoom, _min_zoom, max_zoom)
+	zoom = Vector2.ONE * clampf(zoom.x, _min_zoom, max_zoom)
 	_clamp_position()
