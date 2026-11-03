@@ -18,6 +18,7 @@ signal explore_requested
 signal notice_clicked
 ## The advisor on/off button was pressed.
 signal advisor_toggle_requested
+signal options_requested
 
 const BUTTON_BG := Color(0.16, 0.14, 0.1, 0.95)
 const BUTTON_READY_BG := Color(0.55, 0.38, 0.1, 0.98)
@@ -64,6 +65,19 @@ var _idle_prompt: PanelContainer
 var _idle_label: Label
 var _idle_jump_button: Button
 var _idle_city_id := -1
+## Compact layout (UiLayout.compact): chips instead of the full top bar.
+var _compact := false
+var _top_bar: HBoxContainer
+var _full_top: Array[Control] = []
+var _score_chip: StatChip
+var _research_chip: StatChip
+var _turn_chip: StatChip
+var _options_button: Button
+var _turn := 0
+var _turn_text := ""
+var _countdown_text := ""
+## Bottom-right buttons; each has a "slot" meta (0 is the bottom one).
+var _slots: Array[Button] = []
 
 
 func _ready() -> void:
@@ -73,6 +87,8 @@ func _ready() -> void:
 	var top_bar := HBoxContainer.new()
 	top_bar.add_theme_constant_override("separation", 6)
 	add_child(top_bar)
+	_top_bar = top_bar
+	_build_chips(top_bar)
 	_build_score_indicator(top_bar)
 	_build_research_indicator(top_bar)
 	_tree_button = Button.new()
@@ -92,6 +108,15 @@ func _ready() -> void:
 	var turn_panel := PanelContainer.new()
 	turn_panel.add_theme_stylebox_override("panel", UiStyle.panel())
 	top_bar.add_child(turn_panel)
+	_options_button = Button.new()
+	_options_button.text = "⚙"
+	_options_button.tooltip_text = "Options"
+	_options_button.focus_mode = Control.FOCUS_NONE
+	_options_button.add_theme_font_size_override("font_size", 20)
+	_set_button_bg(_options_button, BUTTON_BG)
+	_options_button.pressed.connect(func() -> void: options_requested.emit())
+	top_bar.add_child(_options_button)
+	_full_top = [_score_panel, _research_panel, _tree_button, _advisor_button, turn_panel]
 	top_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
 	top_bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	var turn_box := VBoxContainer.new()
@@ -134,6 +159,75 @@ func _ready() -> void:
 	_build_idle_prompt()
 
 
+## Compact top bar: score, research and turn as small chips. Tapping one
+## opens its full panel (research) or its details (score, turn).
+func _build_chips(parent: Control) -> void:
+	_score_chip = StatChip.make("score", UiLayout.BODY_FONT + 1, true)
+	_score_chip.hide()
+	_score_chip.tap_action = true
+	_score_chip.tapped.connect(func() -> void: _score_chip.show_full())
+	parent.add_child(_score_chip)
+	_research_chip = StatChip.make("science", UiLayout.BODY_FONT + 1, true)
+	_research_chip.hide()
+	_research_chip.tap_action = true
+	_research_chip.tapped.connect(func() -> void: research_clicked.emit())
+	parent.add_child(_research_chip)
+	_turn_chip = StatChip.make("turns", UiLayout.BODY_FONT + 1, true)
+	_turn_chip.hide()
+	_turn_chip.tap_action = true
+	_turn_chip.tapped.connect(func() -> void: _turn_chip.show_full())
+	parent.add_child(_turn_chip)
+
+
+## Switches the top bar between full indicators and chips, sizes buttons for
+## touch, and hides the key hints where there's no room for them.
+func set_compact(compact: bool) -> void:
+	_compact = compact
+	for control in _full_top:
+		control.visible = not compact
+	for chip: StatChip in [_score_chip, _research_chip, _turn_chip]:
+		chip.visible = compact
+		chip.custom_minimum_size = Vector2(UiLayout.touch_target(), UiLayout.touch_target())
+	_options_button.custom_minimum_size = Vector2.ONE * UiLayout.button_height(0.0)
+	_hint_label.visible = not compact
+	_layout_buttons()
+	_top_bar.reset_size()
+	_top_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 8 if compact else 12)
+	_top_bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+
+
+## Places the bottom-right buttons: full size on desktop; touch-sized and a
+## little narrower in the compact layout.
+func _layout_buttons() -> void:
+	var height := _button_height()
+	var width := 140.0 if _compact else 170.0
+	var margin := 8 if _compact else 12
+	for button in _slots:
+		var slot := int(button.get_meta("slot", 0))
+		button.custom_minimum_size = Vector2(width, height)
+		button.add_theme_font_size_override("font_size", 17 if _compact else 18)
+		button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, margin)
+		button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		button.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		button.offset_top -= _slots_height(slot)
+		button.offset_bottom -= _slots_height(slot)
+		button.pivot_offset = button.custom_minimum_size / 2.0
+
+
+func _button_height() -> float:
+	return UiLayout.button_height(40.0 if _compact else 46.0)
+
+
+## How far up from the bottom `slots` stacked buttons reach.
+func _slots_height(slots: int) -> float:
+	return slots * (_button_height() + (8.0 if _compact else 10.0))
+
+
+## The turn card sits below the top bar.
+func _notice_top() -> int:
+	return int(_top_bar.size.y + 20.0) if _compact else NOTICE_TOP
+
+
 ## "Score 42"; the tooltip has the breakdown. A "+3" floats up when it rises.
 func _build_score_indicator(parent: Control) -> void:
 	_score_panel = PanelContainer.new()
@@ -152,6 +246,7 @@ func _build_score_indicator(parent: Control) -> void:
 func set_score(score: int, tooltip: String, frozen: bool) -> void:
 	_score_label.text = ("Final score %d" if frozen else "Score %d") % score
 	_score_panel.tooltip_text = tooltip
+	_score_chip.set_value(str(score), tooltip, ("Final score %d" if frozen else "Score %d") % score)
 	if _shown_score >= 0 and score > _shown_score and not frozen:
 		_float_text("+%d" % (score - _shown_score), _score_panel)
 	_shown_score = score
@@ -164,6 +259,9 @@ func reset_score() -> void:
 
 ## "12 turns remaining" under the turn label ("" hides it).
 func set_countdown(text: String, urgent: bool) -> void:
+	_countdown_text = text
+	_update_turn_chip()
+	_turn_chip.set_color(DANGER_COLOR if urgent and text != "" else Color.WHITE)
 	_countdown_label.text = text
 	_countdown_label.visible = text != ""
 	_countdown_label.add_theme_color_override("font_color", DANGER_COLOR if urgent else WARNING_COLOR)
@@ -235,6 +333,7 @@ func set_research(info: Dictionary) -> void:
 	_research_panel.modulate = Color.WHITE
 	var per_turn: int = info["per_turn"]
 	_research_label.add_theme_color_override("font_color", Color.WHITE)
+	_update_research_chip(info)
 	if bool(info["done"]):
 		_research_label.text = "All techs known   ·   +%d science" % per_turn
 		_research_bar.max_value = 1
@@ -261,21 +360,36 @@ func set_research(info: Dictionary) -> void:
 		info["stored"], info["cost"], per_turn]
 
 
+## The research chip: "4t" (or "Choose" when nothing is being researched).
+func _update_research_chip(info: Dictionary) -> void:
+	var tech_name: String = info["tech_name"]
+	var turns: int = info["turns"]
+	_research_chip.set_color(Color.WHITE)
+	if bool(info["done"]):
+		_research_chip.set_value("All", "Every tech is known (+%d science per turn)" % info["per_turn"], "Research")
+	elif tech_name == "":
+		_research_chip.set_value("Choose", "Nothing is being researched. Tap to choose.", "Research")
+		_research_chip.set_color(WARNING_COLOR)
+	else:
+		var eta := ", done in %d turn%s" % [turns, "" if turns == 1 else "s"] if turns > 0 else ", no science yet"
+		_research_chip.set_value("%dt" % turns if turns > 0 else "–", "%d/%d science, +%d per turn%s" % [
+			info["stored"], info["cost"], info["per_turn"], eta], tech_name)
+
+
+func _update_turn_chip() -> void:
+	_turn_chip.set_value("T%d" % _turn, _countdown_text, _turn_text)
+
+
 ## A bottom-right button; `slot` 0 is the bottom one, higher slots stack upward.
 func _make_button(text: String, slot: int) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(170, 46)
-	button.add_theme_font_size_override("font_size", 18)
+	button.set_meta("slot", slot)
 	_set_button_bg(button, BUTTON_BG)
 	add_child(button)
-	button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
-	button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	button.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	button.offset_top -= slot * 56
-	button.offset_bottom -= slot * 56
-	button.pivot_offset = button.custom_minimum_size / 2.0
+	_slots.append(button)
+	_layout_buttons()
 	return button
 
 
@@ -287,7 +401,7 @@ func _build_notice() -> void:
 	_notice.gui_input.connect(_on_notice_input)
 	_notice.modulate.a = 0.0
 	add_child(_notice)
-	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, NOTICE_TOP)
+	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, _notice_top())
 	_notice.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
@@ -364,8 +478,8 @@ func show_idle_prompt(city_id: int, city_name: String, other_idle: int) -> void:
 	_idle_prompt.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_idle_prompt.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	# Sit above the two button slots.
-	_idle_prompt.offset_top -= 2 * 56
-	_idle_prompt.offset_bottom -= 2 * 56
+	_idle_prompt.offset_top -= _slots_height(2)
+	_idle_prompt.offset_bottom -= _slots_height(2)
 	_idle_prompt.pivot_offset = _idle_prompt.size / 2.0
 	_idle_prompt.scale = Vector2.ONE * 0.85
 	create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT) 		.tween_property(_idle_prompt, "scale", Vector2.ONE, 0.15)
@@ -382,6 +496,9 @@ func is_idle_prompt_visible() -> bool:
 
 func set_turn(turn: int, year_text: String) -> void:
 	_turn_label.text = "Turn %d   ·   %s" % [turn, year_text]
+	_turn = turn
+	_turn_text = "Turn %d   ·   %s" % [turn, year_text]
+	_update_turn_chip()
 
 
 func set_hint(text: String) -> void:
@@ -430,7 +547,7 @@ func notify(title: String, lines: PackedStringArray = PackedStringArray(), extra
 	_notice_lines.visible = not lines.is_empty()
 	_notice.reset_size()
 	# Re-center after resizing.
-	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, NOTICE_TOP)
+	_notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, _notice_top())
 	if _notice_tween != null:
 		_notice_tween.kill()
 	_notice.modulate.a = 1.0

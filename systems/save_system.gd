@@ -11,6 +11,8 @@ class_name SaveSystem
 ## newer version comes back as null, and the game starts fresh instead.
 
 const AUTOSAVE := "autosave.json"
+## Player preferences (UI size, layout), kept apart from any one game.
+const SETTINGS := "settings.json"
 const _TEMP_SUFFIX := ".tmp"
 ## Keys from_dict reads without a fallback; a save missing any is rejected.
 const _REQUIRED := {
@@ -116,3 +118,26 @@ static func check(data: Variant) -> String:
 	if (dict["players"] as Array).is_empty():
 		return "no players"
 	return ""
+
+
+## Player preferences (see UiLayout). {} when there are none or the file is broken.
+static func load_settings(dir: String = "") -> Dictionary:
+	if dir == "":
+		dir = get_save_dir()
+	var path := dir.path_join(SETTINGS)
+	if not FileAccess.file_exists(path):
+		return {}
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	return data if typeof(data) == TYPE_DICTIONARY else {}
+
+
+static func save_settings(settings: Dictionary, dir: String = "") -> bool:
+	if dir == "":
+		dir = get_save_dir()
+	var file := FileAccess.open(dir.path_join(SETTINGS), FileAccess.WRITE)
+	if file == null:
+		push_warning("Could not write settings: %s" % error_string(FileAccess.get_open_error()))
+		return false
+	file.store_string(JSON.stringify(settings, "\t"))
+	file.close()
+	return true

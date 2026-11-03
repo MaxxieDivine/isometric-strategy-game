@@ -15,6 +15,18 @@ static func panel() -> StyleBoxFlat:
 	return style
 
 
+## An opaque panel for bottom sheets (the map shouldn't show through).
+static func sheet() -> StyleBoxFlat:
+	var style := panel()
+	style.bg_color = Color(PANEL_BG, 1.0)
+	style.set_content_margin_all(8)
+	style.content_margin_top = 2
+	style.border_width_bottom = 0
+	style.border_width_left = 0
+	style.border_width_right = 0
+	return style
+
+
 static func button(bg: Color) -> StyleBoxFlat:
 	var style := panel()
 	style.bg_color = bg

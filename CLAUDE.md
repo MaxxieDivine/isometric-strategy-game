@@ -54,6 +54,13 @@ Weigh every feature, system, and UI change against these. If a change works agai
 - `view/sprite_library.gd` resolves a key to `res://assets/sprites/<key>.png`. When no file exists, the view draws a code-generated placeholder from `view/placeholder_art.gd`. To add real art, drop in the PNG; no code changes needed.
 - All placeholder drawing stays in the view layer.
 
+## UI layout (small screens)
+- On small screens show less at once rather than shrinking text: progressive disclosure (tabs, bottom sheets, chips, long-press for full text).
+- `ui/ui_layout.gd` (`UiLayout`) is the one place that decides layout and scale. It uses available space, not device type: window size in CSS px (physical / `DisplayServer.screen_get_scale()`); a shorter side under 500 means the compact layout. Touch-sized targets follow `DisplayServer.is_touchscreen_available()`. It re-evaluates on every resize; the player can override Layout (Auto / Compact / Full) and UI size in Options, saved to `saves/settings.json` via `SaveSystem`.
+- One UI unit is never smaller than one CSS px. Reading text uses at least `UiLayout.BODY_FONT`; touch targets use `UiLayout.button_height()` / `touch_target()` (48 CSS px).
+- Stats show as icon + number (`StatChip`, icons from sprite keys `icon_<stat>` with code-drawn fallbacks); the full sentence goes on hover and long-press.
+- Panels take `set_compact(bool)`; `systems/main.gd` calls it on every layout change.
+
 ## Web build
 - `export_presets.cfg` has a single-threaded "Web" preset (no special server headers needed). `.github/workflows/deploy-web.yml` runs the tests, exports it and publishes it to GitHub Pages on every push to `main`. Keep its `GODOT_VERSION` in step with the editor.
 - The page carries a `noindex` meta tag; the URL is shared, not advertised.

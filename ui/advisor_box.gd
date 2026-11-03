@@ -19,8 +19,10 @@ const REVEAL_CHARS_PER_SECOND := 120.0
 const TAIL_WIDTH := 10.0
 const MUTED := Color(0.62, 0.65, 0.72)
 
-## Stay clear of this control (to its right) while it is visible.
-var avoid: Control
+## Stay clear of these controls while they are visible: beside them in the
+## full layout (the research picker), above them in the compact layout
+## (bottom sheets).
+var avoid: Array[Control] = []
 
 var _portrait: AdvisorPortrait
 var _tail: Control
@@ -166,15 +168,23 @@ func _process(delta: float) -> void:
 			_fade_out(0.6)
 
 
-## Bottom-left above the key hints; glides right of `avoid` while it's open.
+## Bottom-left above the key hints; glides right of an open card, or above
+## an open bottom sheet in the compact layout.
 func _place(snap: bool, delta: float = 0.0) -> void:
 	var target := MARGIN
-	if avoid != null and avoid.visible:
-		target = avoid.get_global_rect().end.x + MARGIN
+	var bottom := get_viewport_rect().size.y - (MARGIN if UiLayout.compact else BOTTOM_CLEARANCE)
+	for control in avoid:
+		if control == null or not control.visible:
+			continue
+		var rect := control.get_global_rect()
+		if UiLayout.compact:
+			bottom = minf(bottom, rect.position.y - MARGIN)
+		elif rect.position.x < MARGIN * 3.0 and rect.end.y > bottom - size.y:
+			target = maxf(target, rect.end.x + MARGIN)
 	_x = target if snap else lerpf(_x, target, minf(1.0, delta * 12.0))
 	position.x = _x
 	# Recomputed every frame: the wrapped text settles its height a frame late.
-	position.y = get_viewport_rect().size.y - size.y - BOTTOM_CLEARANCE + _slide
+	position.y = bottom - size.y + _slide
 
 
 func _on_click(event: InputEvent) -> void:

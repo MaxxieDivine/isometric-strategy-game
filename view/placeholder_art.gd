@@ -186,3 +186,68 @@ static func draw_portrait(canvas: CanvasItem, rect: Rect2, color: Color, initial
 		int(inner.size.y * 0.26), color.darkened(0.25))
 	canvas.draw_rect(rect, frame, false, 2.0)
 	canvas.draw_rect(inner, frame.darkened(0.3), false, 1.0)
+
+
+## A small stat icon filling `rect`: "food" (a green round with a leaf),
+## "production" (an orange shield-block), "trade" (a gold coin-diamond),
+## "science" (a blue flask), "turns" (an hourglass), "score" (a gold star). Colors for the yields
+## come from data/yields.json via `color`.
+static func draw_stat_icon(canvas: CanvasItem, rect: Rect2, stat: String, color: Color) -> void:
+	var c := rect.get_center()
+	var r := minf(rect.size.x, rect.size.y) / 2.0
+	var outline := Color(0, 0, 0, 0.75)
+	match stat:
+		"food":
+			canvas.draw_circle(c + Vector2(0, r * 0.12), r * 0.78, color)
+			canvas.draw_circle(c + Vector2(0, r * 0.12), r * 0.78, outline, false, 1.2)
+			var leaf := PackedVector2Array([c + Vector2(0, -r * 0.55), c + Vector2(r * 0.55, -r * 0.95),
+				c + Vector2(r * 0.15, -r * 0.45)])
+			canvas.draw_colored_polygon(leaf, color.darkened(0.35))
+			canvas.draw_circle(c + Vector2(-r * 0.25, -r * 0.1), r * 0.18, color.lightened(0.45))
+		"production":
+			var body := PackedVector2Array([c + Vector2(-r * 0.8, -r * 0.75), c + Vector2(r * 0.8, -r * 0.75),
+				c + Vector2(r * 0.8, r * 0.2), c + Vector2(0, r * 0.9), c + Vector2(-r * 0.8, r * 0.2)])
+			canvas.draw_colored_polygon(body, color)
+			var ring := body.duplicate()
+			ring.append(body[0])
+			canvas.draw_polyline(ring, outline, 1.2)
+			canvas.draw_line(c + Vector2(-r * 0.45, -r * 0.3), c + Vector2(r * 0.45, -r * 0.3), color.darkened(0.45), 2.0)
+		"trade":
+			var gem := PackedVector2Array([c + Vector2(0, -r * 0.9), c + Vector2(r * 0.8, 0), c + Vector2(0, r * 0.9),
+				c + Vector2(-r * 0.8, 0)])
+			canvas.draw_colored_polygon(gem, color)
+			var ring := gem.duplicate()
+			ring.append(gem[0])
+			canvas.draw_polyline(ring, outline, 1.2)
+			canvas.draw_line(c + Vector2(-r * 0.3, -r * 0.2), c + Vector2(0, -r * 0.55), color.lightened(0.5), 1.5)
+		"science":
+			var flask := PackedVector2Array([c + Vector2(-r * 0.22, -r * 0.9), c + Vector2(r * 0.22, -r * 0.9),
+				c + Vector2(r * 0.22, -r * 0.3), c + Vector2(r * 0.8, r * 0.85), c + Vector2(-r * 0.8, r * 0.85),
+				c + Vector2(-r * 0.22, -r * 0.3)])
+			canvas.draw_colored_polygon(flask, Color(0.85, 0.92, 1.0, 0.35))
+			canvas.draw_colored_polygon(PackedVector2Array([c + Vector2(-r * 0.5, r * 0.3), c + Vector2(r * 0.5, r * 0.3),
+				c + Vector2(r * 0.8, r * 0.85), c + Vector2(-r * 0.8, r * 0.85)]), color)
+			var ring := flask.duplicate()
+			ring.append(flask[0])
+			canvas.draw_polyline(ring, Color(0.9, 0.95, 1.0), 1.3)
+		"turns":
+			var top := PackedVector2Array([c + Vector2(-r * 0.7, -r * 0.85), c + Vector2(r * 0.7, -r * 0.85), c])
+			var bottom := PackedVector2Array([c, c + Vector2(r * 0.7, r * 0.85), c + Vector2(-r * 0.7, r * 0.85)])
+			canvas.draw_colored_polygon(top, Color(color, 0.35))
+			canvas.draw_colored_polygon(bottom, color)
+			canvas.draw_line(c + Vector2(-r * 0.8, -r * 0.88), c + Vector2(r * 0.8, -r * 0.88), color.lightened(0.3), 2.0)
+			canvas.draw_line(c + Vector2(-r * 0.8, r * 0.88), c + Vector2(r * 0.8, r * 0.88), color.lightened(0.3), 2.0)
+			canvas.draw_polyline(PackedVector2Array([c + Vector2(-r * 0.7, -r * 0.85), c + Vector2(r * 0.7, r * 0.85)]),
+				outline, 1.0)
+			canvas.draw_polyline(PackedVector2Array([c + Vector2(r * 0.7, -r * 0.85), c + Vector2(-r * 0.7, r * 0.85)]),
+				outline, 1.0)
+		"score":
+			var points := PackedVector2Array()
+			for i in 10:
+				var radius := r * (0.95 if i % 2 == 0 else 0.42)
+				points.append(c + Vector2.from_angle(-PI / 2.0 + i * PI / 5.0) * radius)
+			canvas.draw_colored_polygon(points, color)
+			points.append(points[0])
+			canvas.draw_polyline(points, outline, 1.0)
+		_:
+			canvas.draw_circle(c, r * 0.7, color)
