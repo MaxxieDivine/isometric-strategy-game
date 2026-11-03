@@ -1,0 +1,15 @@
+{
+	"version": 1,
+	"search_radius": 6,
+	"weights": {
+		"food": 3,
+		"production": 2,
+		"trade": 1,
+		"unexplored_tile": 2,
+		"coast": 6,
+		"per_step_away": 2,
+		"overlap_tile": 4,
+		"edge_step_short": 8
+	},
+	"edge_clearance": 3
+}

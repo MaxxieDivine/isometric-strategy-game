@@ -16,6 +16,7 @@ const STARTING_UNITS: Array[String] = ["settler", "warrior"]
 static func new_game(map_seed: int, width: int, height: int, turn_limit: int = -1) -> GameState:
 	var state := GameState.new()
 	state.rng.seed = map_seed
+	state.advisor.rng.seed = GameState.advisor_seed(map_seed)
 	state.turn_limit = turn_limit if turn_limit >= 1 else Victory.default_turn_limit()
 	state.map = MapGenerator.generate(width, height, map_seed)
 	var civ := CivDefs.get_def(PLAYER_CIV)

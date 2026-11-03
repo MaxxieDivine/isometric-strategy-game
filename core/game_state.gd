@@ -10,7 +10,9 @@ extends RefCounted
 ## 6: wonders, score history, chronicle, game_over, turn_limit; players gained
 ##    `camps_destroyed`. Older saves load with no wonders, an empty history,
 ##    the default turn limit, and 0 camps destroyed.
-const VERSION := 6
+## 7: `advisor` (AdvisorState: spoken triggers, cooldowns, advice log, its own
+##    RNG). Older saves start with a fresh advisor that has said nothing yet.
+const VERSION := 7
 
 var map: MapState
 var turn: int = 1
@@ -43,6 +45,8 @@ var game_over: Dictionary = {}
 var turn_limit: int = 150
 ## All gameplay randomness draws from this, so saves resume deterministically.
 var rng := RandomNumberGenerator.new()
+## What the advisors have said and remember. Game rules never read it.
+var advisor := AdvisorState.new()
 
 
 # --- Players ------------------------------------------------------------------
@@ -256,6 +260,12 @@ func idle_cities(owner: int) -> Array[CityState]:
 
 # --- Saving -------------------------------------------------------------------
 
+## Seed for the advisor's own random stream, derived from the map seed so it
+## never shares a sequence with the gameplay RNG.
+static func advisor_seed(map_seed: int) -> int:
+	return hash("advisor:%d" % map_seed)
+
+
 func to_dict() -> Dictionary:
 	var unit_data: Array = []
 	for unit in units:
@@ -289,6 +299,7 @@ func to_dict() -> Dictionary:
 		"turn_limit": turn_limit,
 		# 64-bit values as strings: JSON numbers lose precision above 2^53.
 		"rng": { "seed": str(rng.seed), "state": str(rng.state) },
+		"advisor": advisor.to_dict(),
 	}
 
 
@@ -341,6 +352,11 @@ static func from_dict(data: Dictionary) -> GameState:
 	state.turn_limit = int(data.get("turn_limit", Victory.default_turn_limit()))
 	state.rng.seed = String(data["rng"]["seed"]).to_int()
 	state.rng.state = String(data["rng"]["state"]).to_int()
+	# Missing before version 7: a fresh advisor.
+	if data.has("advisor"):
+		state.advisor = AdvisorState.from_dict(data["advisor"])
+	else:
+		state.advisor.rng.seed = advisor_seed(state.map.generation_seed)
 	# Before version 5 there were no barbarians.
 	if int(data.get("version", 0)) < 5:
 		state.ensure_barbarian_player()

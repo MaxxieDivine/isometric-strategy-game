@@ -1,0 +1,117 @@
+{
+	"version": 1,
+	"id": "steward",
+	"name": "Rowan",
+	"title": "Steward of the Realm",
+	"portrait": "advisor_steward",
+	"placeholder_color": "#7a8fb0",
+	"personality": {
+		"tones": ["warm"],
+		"voice": "A patient, kindly steward who has served many rulers. Speaks plainly, encourages, and never lectures."
+	},
+	"initial_state": {},
+	"policies": { "city_site": "best" },
+	"phrases": {
+		"site_here": "right where our settlers stand",
+		"site_away": "{site_distance} steps to the {site_direction}"
+	},
+	"triggers": [
+		{
+			"id": "welcome",
+			"event": "game_started",
+			"conditions": [],
+			"once": true,
+			"cooldown": 0,
+			"priority": 100,
+			"action": { "type": "suggest_city_site", "policy": "city_site" },
+			"lines": [
+				{ "tone": "warm", "text": "Welcome, {player_name}. Our people wait on your word. The land {site_where} looks promising for a first city: I've marked it for you." },
+				{ "tone": "warm", "text": "A new age begins, {player_name}. Every great realm starts with one city. I'd settle {site_where}; the spot is marked on the map." }
+			]
+		},
+		{
+			"id": "settler_site",
+			"event": "unit_selected",
+			"conditions": [
+				{ "fact": "event_unit_can_found", "op": "==", "value": true },
+				{ "fact": "city_count", "op": "==", "value": 0 }
+			],
+			"once": false,
+			"cooldown": 3,
+			"priority": 70,
+			"action": { "type": "suggest_city_site", "policy": "city_site" },
+			"lines": [
+				{ "tone": "warm", "text": "Our settlers grow restless. Good soil lies {site_where}; I've marked it." },
+				{ "tone": "warm", "text": "If I may: {site_where} there's {site_terrain} with food and timber close by. A fine home." }
+			]
+		},
+		{
+			"id": "first_city",
+			"event": "city_founded",
+			"conditions": [
+				{ "fact": "city_count", "op": "==", "value": 1 }
+			],
+			"once": true,
+			"cooldown": 0,
+			"priority": 80,
+			"carry_over": 2,
+			"lines": [
+				{ "tone": "warm", "text": "{city_name} stands! Every great realm began as one city like this." },
+				{ "tone": "warm", "text": "Listen to that: the first hearths of {city_name}. Keep it fed and busy, and it will grow." }
+			]
+		},
+		{
+			"id": "production_done",
+			"event": "city_built",
+			"conditions": [],
+			"once": false,
+			"cooldown": 8,
+			"priority": 30,
+			"lines": [
+				{ "tone": "warm", "text": "{city_name} has finished {item}. The workers are proud of it." },
+				{ "tone": "warm", "text": "Word from {city_name}: {item} is complete." }
+			]
+		},
+		{
+			"id": "city_idle",
+			"event": "city_idle",
+			"conditions": [],
+			"once": false,
+			"cooldown": 5,
+			"priority": 40,
+			"lines": [
+				{ "tone": "warm", "text": "The workers of {city_name} stand idle. They'd welcome something to build." },
+				{ "tone": "warm", "text": "{city_name} has nothing left in its queue. Shall we give it a new task?" }
+			]
+		},
+		{
+			"id": "choose_research",
+			"event": "tech_discovered",
+			"conditions": [
+				{ "fact": "research_chosen", "op": "==", "value": false }
+			],
+			"once": false,
+			"cooldown": 4,
+			"priority": 50,
+			"carry_over": 1,
+			"lines": [
+				{ "tone": "warm", "text": "With {tech} understood, our scholars are eager. Where should they look next?" },
+				{ "tone": "warm", "text": "{tech} is ours! The scholars await your choice of what to study next." }
+			]
+		},
+		{
+			"id": "first_barbarians",
+			"event": "barbarians_spotted",
+			"conditions": [],
+			"once": true,
+			"cooldown": 0,
+			"priority": 90,
+			"carry_over": 2,
+			"lines": [
+				{ "tone": "warm", "text": "Barbarians! Keep a defender in {city_name}; fortified, they hold far better." },
+				{ "tone": "warm", "text": "Riders on the horizon, raiders by the look of them. A fortified warrior keeps {city_name} safe." },
+				{ "tone": "warm", "text": "Barbarians, out in the wilds. Keep our warriors close to home, and fortified." }
+			]
+		}
+	]
+}

@@ -41,6 +41,13 @@ var wonder_card: WonderCard
 var end_screen: EndScreen
 ## The game ended while a wonder card was up: show the end screen after it.
 var _end_screen_pending := false
+## The advisor speaking (bottom-left) and its marker on the map.
+var advisor_box: AdvisorBox
+var advice_marker: AdviceMarker
+## Events since the advisor last looked; it looks once per frame at most, so
+## an action's events and the selection that follows it are weighed together.
+var _advisor_events: Array[Dictionary] = []
+var _advisor_pending := false
 
 ## The last notification card, so mid-turn news (an auto-picked tech, a
 ## fight) can be added to it instead of replacing it.
@@ -89,6 +96,7 @@ func _ready() -> void:
 	hud.fortify_requested.connect(_fortify_selected_unit)
 	hud.notice_clicked.connect(_jump_to_card_place)
 	hud.skip_requested.connect(_skip_selected_unit)
+	hud.advisor_toggle_requested.connect(_toggle_advisor)
 	_build_touch_input()
 	_build_overlays()
 	_seed_picker.randomize()
@@ -98,6 +106,12 @@ func _ready() -> void:
 func _build_overlays() -> void:
 	# A full-screen holder above the HUD, so the overlays can center
 	# themselves and play their bursts.
+	advisor_box = AdvisorBox.new()
+	advisor_box.name = "AdvisorBox"
+	advisor_box.avoid = research_picker
+	$UI.add_child(advisor_box)
+	advice_marker = AdviceMarker.new()
+	add_child(advice_marker)
 	var overlays := Control.new()
 	overlays.name = "Overlays"
 	overlays.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -220,7 +234,12 @@ func _continue_or_new_game() -> void:
 
 
 func _new_game(map_seed: int) -> void:
-	_start_game(GameSetup.new_game(map_seed, MAP_WIDTH, MAP_HEIGHT))
+	# Turning the advisor off is the player's choice, so it carries over.
+	var advisor_on := state.advisor.enabled if state != null else true
+	var new_state := GameSetup.new_game(map_seed, MAP_WIDTH, MAP_HEIGHT)
+	new_state.advisor.enabled = advisor_on
+	_start_game(new_state)
+	_queue_advisor([{ "type": "game_started", "player": PLAYER }])
 	var units := state.units_of(PLAYER)
 	if not units.is_empty():
 		_look_at(units[0].position)
@@ -261,6 +280,10 @@ func _notification(what: int) -> void:
 func _start_game(new_state: GameState) -> void:
 	state = new_state
 	_new_world_armed = false
+	_advisor_events.clear()
+	advisor_box.clear()
+	advice_marker.hide()
+	_refresh_advisor_button()
 	units_layer.clear_units()
 	cities_layer.clear_cities()
 	camps_layer.clear()
@@ -520,8 +543,11 @@ func _select_unit(unit_id: int) -> void:
 	_clear_preview()
 	if unit_id != NO_UNIT:
 		_close_city()
+	var changed := unit_id != _selected_unit
 	_selected_unit = unit_id
 	var unit := state.get_unit(unit_id)
+	if changed and unit != null:
+		_queue_advisor([{ "type": "unit_selected", "unit_id": unit_id }])
 	if unit != null:
 		highlight.hide()
 		_show_unit_info(unit)
@@ -706,6 +732,7 @@ func _show_end_screen() -> void:
 	research_picker.hide()
 	tech_tree.hide()
 	hud.hide_idle_prompt()
+	advisor_box.clear()
 	end_screen.show_result(_end_screen_info())
 
 
@@ -922,6 +949,9 @@ func _apply_events(events: Array[Dictionary]) -> void:
 				hud.notify(event["reason"])
 			"city_founded":
 				var city := state.get_city(event["city_id"])
+				if city.owner == PLAYER:
+					# The suggested site has served its purpose.
+					advice_marker.hide()
 				hud.notify("%s is founded!" % city.name, PackedStringArray(["%s the city to choose what to build" % UiText.click()]))
 			"build_failed", "research_failed":
 				hud.notify(event["reason"])
@@ -930,6 +960,7 @@ func _apply_events(events: Array[Dictionary]) -> void:
 					"Your final score stays at %d. Play on as long as you like." % Score.score(state, PLAYER)]))
 			"turn_started":
 				new_turn = event["turn"]
+	_queue_advisor(events)
 	var news := TurnNews.describe(state, events, PLAYER)
 	var lines: PackedStringArray = news["lines"]
 	var highlights: PackedStringArray = news["highlights"]
@@ -963,6 +994,47 @@ func _apply_events(events: Array[Dictionary]) -> void:
 	elif new_turn != -1 and research_picker.visible and Research.current(state, PLAYER) != "":
 		# Ending the turn with the picker open auto-picked; the choice is made.
 		research_picker.hide()
+
+
+# --- Advisor --------------------------------------------------------------------
+
+func _queue_advisor(events: Array[Dictionary]) -> void:
+	if state == null:
+		return
+	_advisor_events.append_array(events)
+	if not _advisor_pending:
+		_advisor_pending = true
+		_run_advisor.call_deferred()
+
+
+func _run_advisor() -> void:
+	_advisor_pending = false
+	var events := _advisor_events.duplicate()
+	_advisor_events.clear()
+	if state == null or end_screen.visible:
+		return
+	var message := AdvisorDirector.observe(state, PLAYER, events)
+	if message.is_empty():
+		return
+	advisor_box.say(message)
+	var cell: Vector2i = message["highlight"]
+	if cell != NO_CELL:
+		advice_marker.show_at(map_view.grid_to_world(cell))
+		camera.ensure_visible(map_view.grid_to_world(cell))
+
+
+func _toggle_advisor() -> void:
+	AdvisorDirector.set_enabled(state, not state.advisor.enabled)
+	if not state.advisor.enabled:
+		advisor_box.clear()
+		advice_marker.hide()
+	_refresh_advisor_button()
+	_autosave()
+
+
+func _refresh_advisor_button() -> void:
+	var ids := AdvisorDefs.ids()
+	hud.set_advisor_enabled(state.advisor.enabled, AdvisorDefs.display_name(ids[0]) if not ids.is_empty() else "")
 
 
 func _show_card(celebrate: bool) -> void:
