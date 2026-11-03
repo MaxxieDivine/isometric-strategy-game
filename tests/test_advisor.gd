@@ -32,6 +32,7 @@ func _initialize() -> void:
 	AdvisorDefs.reset()
 	_test_real_advisor_data()
 	_test_advice_followed_log()
+	_test_first_scout_line()
 	_test_determinism_on_off()
 	AdvisorDefs.reset()
 	if _failures == 0:
@@ -394,7 +395,7 @@ func _test_old_save_loads() -> void:
 	_check(loaded != null and loaded.advisor.enabled and loaded.advisor.advice_log.is_empty(),
 		"a version 6 save loads with a fresh advisor")
 	_check(loaded.advisor.rng.seed == GameState.advisor_seed(state.map.generation_seed), "its advisor gets a seeded RNG")
-	_check(int(state.to_dict()["version"]) == 7, "saves are version 7")
+	_check(int(state.to_dict()["version"]) >= 7, "saves are version 7 or later")
 
 
 # --- The real advisor ----------------------------------------------------------
@@ -429,6 +430,12 @@ func _test_real_advisor_data() -> void:
 	_check(CitySiteScorer.can_settle(state, 0, cell), "the welcome marks a site a city can be founded on")
 	_check(not String(message.get("text", "")).contains("{"), "every placeholder is filled: %s" % message.get("text"))
 	_check(not String(message.get("text", "")).to_lower().contains("tip"), "no 'Tip' wording")
+	var site := AdvisorDirector.suggest_city_site(state, 0, "steward", { "unit_id": settler.id }, "city_site")
+	var steps := int(site["values"]["site_distance"])
+	_check(String(site["values"]["site_steps"]) == ("1 step" if steps == 1 else "%d steps" % steps),
+		"site_steps agrees with the distance, singular for one")
+	_check(AdvisorText.fill(AdvisorDefs.phrase("steward", "site_away"), { "site_steps": "1 step",
+		"site_direction": "north" }) == "1 step to the north", "one step away reads '1 step to the north'")
 
 
 func _test_advice_followed_log() -> void:
@@ -448,6 +455,21 @@ func _test_advice_followed_log() -> void:
 	_check(String(entry["outcome"]) == expected, "founding resolves the advice as %s (got %s)" % [expected, entry["outcome"]])
 	_check(int(entry["distance"]) == IsoGrid.step_distance(start, suggested), "the log notes how far off the city was")
 	_check(entry["actual"] == [start.x, start.y], "the log notes where the city was founded")
+
+
+func _test_first_scout_line() -> void:
+	var state := GameSetup.new_game(SEED, 40, 80)
+	var city := state.add_city(0, state.units[0].position)
+	var built: Array[Dictionary] = [_event("city_built", { "city_id": city.id, "item": "warrior" })]
+	_check(String(AdvisorDirector.observe(state, 0, built).get("trigger", "")) != "first_scout",
+		"a warrior doesn't bring up exploring")
+	state.turn = 5
+	var scout: Array[Dictionary] = [_event("city_built", { "city_id": city.id, "item": "scout" })]
+	var message := AdvisorDirector.observe(state, 0, scout)
+	_check(String(message.get("trigger", "")) == "first_scout", "the first scout brings up Explore")
+	_check(String(message.get("text", "")).contains("Explore"), "and names the command")
+	state.turn = 20
+	_check(String(AdvisorDirector.observe(state, 0, scout).get("trigger", "")) != "first_scout", "only the first time")
 
 
 # --- Determinism -------------------------------------------------------------------

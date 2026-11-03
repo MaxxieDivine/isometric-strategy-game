@@ -98,6 +98,7 @@ func _ready() -> void:
 	hud.fortify_requested.connect(_fortify_selected_unit)
 	hud.notice_clicked.connect(_jump_to_card_place)
 	hud.skip_requested.connect(_skip_selected_unit)
+	hud.explore_requested.connect(_explore_selected_unit)
 	hud.advisor_toggle_requested.connect(_toggle_advisor)
 	_build_touch_input()
 	_build_overlays()
@@ -158,7 +159,8 @@ func _enter_touch_mode() -> void:
 func _hint_text() -> String:
 	if _touch_mode:
 		return "Tap: select   ·   Tap a tile twice: move/attack   ·   Hold: move onto your units   ·   Drag: pan   ·   Pinch: zoom"
-	return "B: found city   ·   F: fortify   ·   Space: skip   ·   Enter: end turn   ·   Right-click: move/attack   ·   T: techs   ·   R: new world"
+	# Kept short enough to clear the End Turn button at 1280 px wide.
+	return "B: found city  ·  F: fortify  ·  X: explore  ·  Space: skip  ·  Enter: end turn  ·  Right-click: move/attack  ·  T: techs  ·  R: new world"
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -182,6 +184,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_tech_tree()
 	elif event.is_action_pressed("fortify"):
 		_fortify_selected_unit()
+	elif event.is_action_pressed("explore"):
+		_explore_selected_unit()
 	elif event.is_action_pressed("deselect"):
 		if tech_tree.visible:
 			tech_tree.hide()
@@ -362,6 +366,15 @@ func _found_city() -> void:
 		_select_next_unit()
 
 
+## The selected unit explores on its own until it wakes up (see Exploration).
+func _explore_selected_unit() -> void:
+	var unit := state.get_unit(_selected_unit)
+	if unit == null or unit.exploring or not Exploration.can_explore(unit):
+		return
+	_apply_events(GameActions.explore_unit(state, unit.id))
+	_select_next_unit()
+
+
 func _fortify_selected_unit() -> void:
 	var unit := state.get_unit(_selected_unit)
 	if unit == null or UnitDefs.can_found_city(unit.type):
@@ -432,7 +445,7 @@ func _world_to_screen(world_pos: Vector2) -> Vector2:
 ## First tap on a destination: draw the route and say what a second tap does.
 func _preview_move(unit: UnitState, cell: Vector2i) -> void:
 	var path := Pathfinder.find_path(state.map, state.explored[PLAYER], unit.position, cell,
-		UnitDefs.domain(unit.type))
+		UnitDefs.domain(unit.type), UnitDefs.ignores_terrain(unit.type))
 	if path.is_empty():
 		_clear_preview()
 		hud.notify("No known route there")
@@ -561,6 +574,7 @@ func _select_unit(unit_id: int) -> void:
 	hud.set_found_city_visible(unit != null and UnitDefs.can_found_city(unit.type))
 	hud.set_fortify_visible(unit != null and not UnitDefs.can_found_city(unit.type) and not unit.fortified)
 	hud.set_skip_visible(unit != null and unit.needs_orders())
+	hud.set_explore_visible(unit != null and not unit.exploring and Exploration.can_explore(unit))
 	_pending_attack = NO_CELL
 	units_layer.sync(state, _selected_unit, map_view, PLAYER, _visible)
 	_update_attack_odds()
@@ -1119,7 +1133,9 @@ func _show_unit_info(unit: UnitState) -> void:
 		unit.hp, Combat.max_hp()]
 	if unit.fortified:
 		details += "\nFortified (+%d%% defense until it moves)" % Combat.fortified_percent()
-	if unit.has_goal():
+	if unit.exploring:
+		details += "\nExploring on its own   ·   give it any order to stop"
+	elif unit.has_goal():
 		var turns := Movement.path_turns(unit, state.map, state.explored[unit.owner])
 		var eta: int = turns.back() + 1 if not turns.is_empty() else 1
 		details += "\nHeading to (%d, %d)  ·  %d turn%s" % [unit.goal.x, unit.goal.y, eta, "" if eta == 1 else "s"]
@@ -1129,6 +1145,8 @@ func _show_unit_info(unit: UnitState) -> void:
 		if UnitDefs.can_found_city(unit.type):
 			var reason := CityRules.can_found(state, unit)
 			details += "\n" + (_found_city_hint() if reason == "" else reason)
+		elif not Combat.can_attack(unit):
+			details += "\nCan't attack   ·   " + ("Tap Explore to scout on its own" if _touch_mode else "X: explore on its own")
 		elif not unit.fortified:
 			details += "\nTap an enemy twice to attack" if _touch_mode else "\nF: fortify   ·   Right-click an enemy to attack"
 	info_panel.show_info(def["name"], details, Color.html(state.players[unit.owner]["color"]))

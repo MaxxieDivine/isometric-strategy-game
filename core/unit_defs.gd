@@ -39,3 +39,13 @@ static func can_found_city(id: String) -> bool:
 
 static func domain(id: String) -> String:
 	return String(get_def(id).get("domain", "land"))
+
+
+## How far the unit sees on flat ground (default 1; terrain may add to it).
+static func sight(id: String) -> int:
+	return int(get_def(id).get("sight", 1))
+
+
+## Every passable land tile costs this unit 1 move (scouts ignore hills and forest).
+static func ignores_terrain(id: String) -> bool:
+	return bool(get_def(id).get("ignores_terrain", false))

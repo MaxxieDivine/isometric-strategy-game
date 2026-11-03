@@ -23,6 +23,9 @@ extends RefCounted
 ##   research_failed  { player, reason }
 ##   tech_discovered  { player, tech }
 ##   unit_fortified   { unit_id }
+##   unit_exploring   { unit_id }   (auto-explore ordered)
+##   explore_stopped  { unit_id, unit_type, reason, cell }   (it woke up: reason
+##                    is "finished", "barbarians" or "hurt"; see Exploration)
 ##   combat           { attacker_id, defender_id, winner, ... }   (see Combat.resolve)
 ##   unit_disbanded   { unit_id, unit_type, city_id }   (upkeep the city couldn't pay)
 ##   camp_spawned     { camp_id, cell }
@@ -47,6 +50,7 @@ static func move_unit(state: GameState, unit_id: int, goal: Vector2i) -> Array[D
 	var unit := state.get_unit(unit_id)
 	if unit == null:
 		return events
+	unit.stop_exploring()
 	if goal == unit.position:
 		unit.clear_orders()
 		return events
@@ -71,6 +75,7 @@ static func fortify_unit(state: GameState, unit_id: int) -> Array[Dictionary]:
 	if unit == null:
 		return events
 	unit.clear_orders()
+	unit.stop_exploring()
 	unit.fortified = true
 	unit.moves_left = 0
 	events.append({ "type": "unit_fortified", "unit_id": unit_id })
@@ -82,8 +87,23 @@ static func skip_unit(state: GameState, unit_id: int) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
 	var unit := state.get_unit(unit_id)
 	if unit != null:
+		unit.stop_exploring()
 		unit.moves_left = 0
 		events.append({ "type": "unit_skipped", "unit_id": unit_id })
+	return events
+
+
+## The unit explores on its own from now on (see Exploration): it moves now
+## and at the start of every turn until it has seen everything it can reach,
+## spots barbarians, or is badly hurt. Any other order stops it.
+static func explore_unit(state: GameState, unit_id: int) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	var unit := state.get_unit(unit_id)
+	if unit == null or not Exploration.can_explore(unit):
+		return events
+	events.append_array(Exploration.start(state, unit))
+	events.append_array(_sightings(state))
+	Chronicle.record(state, events)
 	return events
 
 
@@ -192,6 +212,10 @@ static func end_turn(state: GameState) -> Array[Dictionary]:
 	for unit in state.units:
 		if unit.has_goal():
 			events.append_array(_advance(state, unit))
+	# Explorers move on their own, so the player never waits on them.
+	for unit in state.units.duplicate():
+		if unit.exploring and not state.is_barbarian(unit.owner):
+			events.append_array(Exploration.explore(state, unit))
 	events.append_array(_sightings(state))
 	Score.record(state)
 	events.append_array(Victory.check(state))
@@ -217,14 +241,13 @@ static func _sightings(state: GameState) -> Array[Dictionary]:
 
 static func _plan(state: GameState, unit: UnitState, goal: Vector2i) -> Array[Vector2i]:
 	return Pathfinder.find_path(state.map, state.explored[unit.owner], unit.position, goal,
-		UnitDefs.domain(unit.type))
+		UnitDefs.domain(unit.type), UnitDefs.ignores_terrain(unit.type))
 
 
 ## Steps the unit along its route while it has moves. The route is re-planned
 ## each step, because moving reveals terrain that may change the best path.
 static func _advance(state: GameState, unit: UnitState) -> Array[Dictionary]:
 	var events: Array[Dictionary] = []
-	var domain := UnitDefs.domain(unit.type)
 	while unit.has_goal() and unit.moves_left > 0:
 		var path := _plan(state, unit, unit.goal)
 		if path.is_empty():
@@ -241,19 +264,27 @@ static func _advance(state: GameState, unit: UnitState) -> Array[Dictionary]:
 				unit.clear_orders()
 				events.append({ "type": "orders_cancelled", "unit_id": unit.id })
 			break
-		var cost := Movement.enter_cost(state.map, state.explored[unit.owner], next, domain)
+		var cost := Movement.unit_enter_cost(state.map, state.explored[unit.owner], next, unit.type)
 		if not Movement.can_enter(unit.moves_left, unit.max_moves(), cost):
 			break
-		var from := unit.position
-		unit.position = next
-		unit.moves_left = maxi(0, unit.moves_left - cost)
 		unit.path.remove_at(0)
-		unit.moved = true
-		var revealed := Fog.reveal_around(state, unit.owner, next)
-		events.append({ "type": "unit_moved", "unit_id": unit.id, "from": from, "to": next, "revealed": revealed })
-		var camp := state.camp_at(next)
-		if camp != null and not state.is_barbarian(unit.owner):
-			events.append_array(Barbarians.destroy_camp(state, unit, camp))
+		events.append_array(step_unit(state, unit, next, cost))
 		if unit.position == unit.goal:
 			unit.clear_orders()
+	return events
+
+
+## Moves `unit` one step onto `next` for `cost` moves: reveals what it can
+## see from there and clears a barbarian camp it walks into. No rule checks.
+static func step_unit(state: GameState, unit: UnitState, next: Vector2i, cost: int) -> Array[Dictionary]:
+	var events: Array[Dictionary] = []
+	var from := unit.position
+	unit.position = next
+	unit.moves_left = maxi(0, unit.moves_left - cost)
+	unit.moved = true
+	var revealed := Fog.reveal_around(state, unit.owner, next, unit.type)
+	events.append({ "type": "unit_moved", "unit_id": unit.id, "from": from, "to": next, "revealed": revealed })
+	var camp := state.camp_at(next)
+	if camp != null and not state.is_barbarian(unit.owner):
+		events.append_array(Barbarians.destroy_camp(state, unit, camp))
 	return events
