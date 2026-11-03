@@ -44,6 +44,8 @@ var _end_screen_pending := false
 ## The advisor speaking (bottom-left) and its marker on the map.
 var advisor_box: AdvisorBox
 var advice_marker: AdviceMarker
+## Darkens and frames what the camera shows past the map edge.
+var map_frame: MapFrame
 ## Events since the advisor last looked; it looks once per frame at most, so
 ## an action's events and the selection that follows it are weighed together.
 var _advisor_events: Array[Dictionary] = []
@@ -112,6 +114,8 @@ func _build_overlays() -> void:
 	$UI.add_child(advisor_box)
 	advice_marker = AdviceMarker.new()
 	add_child(advice_marker)
+	map_frame = MapFrame.new()
+	add_child(map_frame)
 	var overlays := Control.new()
 	overlays.name = "Overlays"
 	overlays.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -304,6 +308,7 @@ func _start_game(new_state: GameState) -> void:
 	var half := Vector2(TerrainTilesetBuilder.TILE_SIZE) / 2.0
 	var bounds := map_view.get_grid_world_rect(MAP_WIDTH, MAP_HEIGHT).grow_individual(-half.x, -half.y, -half.x, -half.y)
 	camera.set_bounds(bounds)
+	map_frame.set_bounds(bounds)
 	# The seed is printed to the console (see below); the hint stays short enough to clear the buttons.
 	hud.set_hint(_hint_text())
 	_refresh_world()
