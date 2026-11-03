@@ -18,6 +18,15 @@ Weigh every feature, system, and UI change against these. If a change works agai
    - Classic isometric tile look and readable, chunky UI in the spirit of Civ II.
    - Make it feel alive with small motion and feedback: idle animations, water and ambient movement, tweens on unit moves, juicy feedback when something completes. Never let it slow down pillar 1, so animations must be skippable or fast.
 
+## Narrative design
+- Advisors are a core narrative system. There will be several, each with their own personality and agenda, and their story may tie into the rival AI civs.
+- Early on they act as a tutorial and genuinely help. Later an advisor's advice may turn self-interested, annoying, or even malicious.
+- So never assume advice is optimal or honest. Game systems produce options (e.g. `CitySiteScorer` ranks city sites); the advisor chooses what to say about them through a selection policy named in its data (`AdvisorPolicy`, only `"best"` so far).
+- Keep advisors decoupled from rivals, but design nothing that would stop linking them later.
+- Advisors only observe: `AdvisorDirector` reads game events and state and writes only `GameState.advisor`. Game rules never read advisor state, and dialogue randomness uses the advisor's own RNG, never `GameState.rng`, so advisor activity can't change any game outcome (`tests/test_advisor.gd` checks this).
+- Advisors are data: `data/advisors/roster.json` lists the active ones; `data/advisors/<id>.json` holds name, title, portrait sprite key, personality, policies, phrases and dialogue triggers (event, conditions, once, cooldown, priority, carry_over, optional action, line variants with `{placeholders}` and a tone tag). Tune frequency there, not in code.
+- Presentation is a character speaking: no "Tip"/"Tutorial" labels, never blocking, always dismissable, and the player can turn it off.
+
 ## Architecture rules
 
 ### Game state is plain data, separate from rendering

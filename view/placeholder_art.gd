@@ -157,3 +157,32 @@ static func draw_centered_text(canvas: CanvasItem, center: Vector2, text: String
 	canvas.draw_string_outline(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 3,
 		background.darkened(0.6))
 	canvas.draw_string(font, baseline, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
+
+
+## An advisor portrait stand-in: a gold frame around a dark backdrop, a head
+## and shoulders silhouette in `color`, and the advisor's initial on the chest.
+static func draw_portrait(canvas: CanvasItem, rect: Rect2, color: Color, initial: String) -> void:
+	var frame := Color(0.85, 0.75, 0.45)
+	canvas.draw_rect(rect, frame.darkened(0.45))
+	var inner := rect.grow(-4.0)
+	canvas.draw_rect(inner, Color(0.12, 0.13, 0.19))
+	# A soft lit backdrop behind the head.
+	canvas.draw_circle(inner.get_center() + Vector2(0, -inner.size.y * 0.12), inner.size.x * 0.42,
+		Color(color, 0.18))
+	var shoulders_top := inner.position.y + inner.size.y * 0.62
+	var shoulders := PackedVector2Array([
+		Vector2(inner.position.x + inner.size.x * 0.1, inner.end.y),
+		Vector2(inner.position.x + inner.size.x * 0.18, shoulders_top + 6.0),
+		Vector2(inner.get_center().x - inner.size.x * 0.12, shoulders_top),
+		Vector2(inner.get_center().x + inner.size.x * 0.12, shoulders_top),
+		Vector2(inner.end.x - inner.size.x * 0.18, shoulders_top + 6.0),
+		Vector2(inner.end.x - inner.size.x * 0.1, inner.end.y),
+	])
+	canvas.draw_colored_polygon(shoulders, color.darkened(0.25))
+	var head := Vector2(inner.get_center().x, inner.position.y + inner.size.y * 0.38)
+	canvas.draw_circle(head, inner.size.x * 0.2, color)
+	canvas.draw_arc(head, inner.size.x * 0.2, PI * 1.05, PI * 1.95, 10, color.lightened(0.3), 2.0)
+	draw_centered_text(canvas, Vector2(head.x, inner.end.y - inner.size.y * 0.16), initial,
+		int(inner.size.y * 0.26), color.darkened(0.25))
+	canvas.draw_rect(rect, frame, false, 2.0)
+	canvas.draw_rect(inner, frame.darkened(0.3), false, 1.0)

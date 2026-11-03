@@ -1,0 +1,6 @@
+{
+	"version": 1,
+	"advisors": ["steward"],
+	"max_messages_per_turn": 1,
+	"log_limit": 200
+}

@@ -1,6 +1,6 @@
 class_name Hud
 extends Control
-## Top bar (research indicator, tech tree button, turn/year), End Turn,
+## Top bar (score, research indicator, tech tree and advisor buttons, turn/year), End Turn,
 ## Found City, Fortify and Skip buttons, key hints, a notification card for batched
 ## turn news (with highlights and warnings; clickable when it points at a
 ## place), the attack-odds tag, and the idle-city prompt.
@@ -15,6 +15,8 @@ signal fortify_requested
 signal skip_requested
 ## The turn card was clicked while it pointed at a place on the map.
 signal notice_clicked
+## The advisor on/off button was pressed.
+signal advisor_toggle_requested
 
 const BUTTON_BG := Color(0.16, 0.14, 0.1, 0.95)
 const BUTTON_READY_BG := Color(0.55, 0.38, 0.1, 0.98)
@@ -38,6 +40,7 @@ var _found_city_button: Button
 var _fortify_button: Button
 var _skip_button: Button
 var _tree_button: Button
+var _advisor_button: Button
 var _touch_mode := false
 var _notice_warnings: Label
 var _notice_clickable := false
@@ -77,6 +80,13 @@ func _ready() -> void:
 	_set_button_bg(_tree_button, BUTTON_BG)
 	_tree_button.pressed.connect(func() -> void: tech_tree_requested.emit())
 	top_bar.add_child(_tree_button)
+	_advisor_button = Button.new()
+	_advisor_button.focus_mode = Control.FOCUS_NONE
+	_advisor_button.add_theme_font_size_override("font_size", 15)
+	_set_button_bg(_advisor_button, BUTTON_BG)
+	_advisor_button.pressed.connect(func() -> void: advisor_toggle_requested.emit())
+	top_bar.add_child(_advisor_button)
+	set_advisor_enabled(true, "")
 	var turn_panel := PanelContainer.new()
 	turn_panel.add_theme_stylebox_override("panel", UiStyle.panel())
 	top_bar.add_child(turn_panel)
@@ -442,6 +452,15 @@ func _shake_notice() -> void:
 	var tween := create_tween()
 	for x: float in [8.0, -7.0, 5.0, -3.0, 0.0]:
 		tween.tween_property(_notice, "position:x", rest + x, 0.05)
+
+
+## The advisor button: "Advisor: on" or "Advisor: off" (`advisor_name` for the tooltip).
+func set_advisor_enabled(enabled: bool, advisor_name: String) -> void:
+	_advisor_button.text = "Advisor: on" if enabled else "Advisor: off"
+	var who := advisor_name if advisor_name != "" else "your advisor"
+	_advisor_button.tooltip_text = ("%s offers counsel now and then. Press to turn it off." if enabled
+		else "%s keeps quiet. Press to hear their counsel again.") % who
+	_advisor_button.modulate = Color.WHITE if enabled else Color(0.7, 0.7, 0.7)
 
 
 func set_fortify_visible(shown: bool) -> void:
