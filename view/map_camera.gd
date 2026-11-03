@@ -1,7 +1,8 @@
 class_name MapCamera
 extends Camera2D
 ## Strategy-map camera: WASD/arrow and screen-edge panning, smooth mouse-wheel
-## zoom toward the cursor, always clamped to the map bounds.
+## zoom toward the cursor. Its center stays on the map, so any tile can be
+## centered; near an edge the view shows past it (see MapFrame).
 
 ## Pan speed in screen pixels per second (constant feel at any zoom).
 const PAN_SPEED := 900.0
@@ -154,6 +155,9 @@ func _clamp_position() -> void:
 	position = _clamped(position)
 
 
+## The view's center may sit anywhere on the map, so any tile can be centered
+## at any zoom; near an edge up to half a screen shows past it (MapFrame draws
+## that margin). When the whole map fits along an axis, it stays centered.
 func _clamped(pos: Vector2) -> Vector2:
 	if _bounds.size == Vector2.ZERO:
 		return pos
@@ -162,9 +166,7 @@ func _clamped(pos: Vector2) -> Vector2:
 		if half_view[axis] * 2.0 >= _bounds.size[axis]:
 			pos[axis] = _bounds.get_center()[axis]
 		else:
-			pos[axis] = clampf(pos[axis],
-				_bounds.position[axis] + half_view[axis],
-				_bounds.end[axis] - half_view[axis])
+			pos[axis] = clampf(pos[axis], _bounds.position[axis], _bounds.end[axis])
 	return pos
 
 
