@@ -10,7 +10,9 @@ const NO_UNIT := -1
 const NO_CITY := -1
 const START_ZOOM := 1.25
 ## Touch screens start closer in and may zoom further, so a tile fits a fingertip.
-const TOUCH_START_ZOOM := 2.0
+## On touch screens a map tile starts about this many CSS pixels wide, so it
+## fits a fingertip whatever the UI scale.
+const TOUCH_TILE_CSS := 70.0
 const TOUCH_MAX_ZOOM := 3.0
 const UNEXPLORED_SWATCH := Color(0.05, 0.06, 0.09)
 const NO_CELL := Vector2i(-1, -1)
@@ -46,6 +48,10 @@ var advisor_box: AdvisorBox
 var advice_marker: AdviceMarker
 ## Darkens and frames what the camera shows past the map edge.
 var map_frame: MapFrame
+## Decides compact vs full layout and the UI scale (see UiLayout).
+var ui_layout: UiLayout
+var options_panel: OptionsPanel
+var info_popover: InfoPopover
 ## Events since the advisor last looked; it looks once per frame at most, so
 ## an action's events and the selection that follows it are weighed together.
 var _advisor_events: Array[Dictionary] = []
@@ -100,8 +106,15 @@ func _ready() -> void:
 	hud.skip_requested.connect(_skip_selected_unit)
 	hud.explore_requested.connect(_explore_selected_unit)
 	hud.advisor_toggle_requested.connect(_toggle_advisor)
+	hud.options_requested.connect(_toggle_options)
+	research_picker.tech_tree_requested.connect(_toggle_tech_tree)
+	ui_layout = UiLayout.new()
+	ui_layout.name = "UiLayout"
+	add_child(ui_layout)
 	_build_touch_input()
 	_build_overlays()
+	ui_layout.changed.connect(_apply_layout)
+	_apply_layout()
 	_seed_picker.randomize()
 	_continue_or_new_game()
 
@@ -111,7 +124,7 @@ func _build_overlays() -> void:
 	# themselves and play their bursts.
 	advisor_box = AdvisorBox.new()
 	advisor_box.name = "AdvisorBox"
-	advisor_box.avoid = research_picker
+	advisor_box.avoid = [research_picker, city_panel]
 	$UI.add_child(advisor_box)
 	advice_marker = AdviceMarker.new()
 	add_child(advice_marker)
@@ -121,7 +134,7 @@ func _build_overlays() -> void:
 	overlays.name = "Overlays"
 	overlays.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	$UI.add_child(overlays)
-	overlays.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlays.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var ui := overlays
 	wonder_card = WonderCard.new()
 	ui.add_child(wonder_card)
@@ -130,6 +143,20 @@ func _build_overlays() -> void:
 	ui.add_child(end_screen)
 	end_screen.new_game_requested.connect(func() -> void: _new_game(_seed_picker.randi()))
 	end_screen.keep_playing_requested.connect(_keep_playing)
+	options_panel = OptionsPanel.new()
+	ui.add_child(options_panel)
+	options_panel.close_requested.connect(options_panel.hide)
+	options_panel.ui_scale_changed.connect(func(value: float) -> void:
+		ui_layout.set_ui_scale(value)
+		_open_options())
+	options_panel.layout_changed.connect(func(layout: String) -> void:
+		ui_layout.set_layout(layout)
+		_open_options())
+	options_panel.advisor_toggled.connect(func() -> void:
+		_toggle_advisor()
+		_open_options())
+	info_popover = InfoPopover.new()
+	ui.add_child(info_popover)
 
 
 func _build_touch_input() -> void:
@@ -154,6 +181,7 @@ func _enter_touch_mode() -> void:
 	hud.set_touch_mode(true)
 	hud.hide_odds()
 	hud.set_hint(_hint_text())
+	ui_layout.refresh()
 
 
 func _hint_text() -> String:
@@ -187,7 +215,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("explore"):
 		_explore_selected_unit()
 	elif event.is_action_pressed("deselect"):
-		if tech_tree.visible:
+		if options_panel.visible:
+			options_panel.hide()
+		elif tech_tree.visible:
 			tech_tree.hide()
 		elif research_picker.visible:
 			_dismiss_research_picker()
@@ -268,7 +298,68 @@ func _request_new_world() -> void:
 
 
 func _look_at(cell: Vector2i) -> void:
-	camera.look_at_world(map_view.grid_to_world(cell), TOUCH_START_ZOOM if _touch_mode else START_ZOOM)
+	camera.look_at_world(map_view.grid_to_world(cell), _touch_zoom() if _touch_mode else START_ZOOM)
+
+
+func _touch_zoom() -> float:
+	return TOUCH_TILE_CSS / (TerrainTilesetBuilder.TILE_SIZE.x * UiLayout.css_per_unit)
+
+
+# --- Layout and options ---------------------------------------------------------
+
+## Re-lays out the UI for the current screen (UiLayout decided compact/full,
+## touch and scale). Runs at start and on every resize or setting change.
+func _apply_layout() -> void:
+	var compact := UiLayout.compact
+	hud.set_compact(compact)
+	city_panel.set_compact(compact)
+	research_picker.set_compact(compact)
+	info_panel.set_compact(compact)
+	hud.set_hint(_hint_text())
+	InfoPopover.hide_any()
+	if options_panel.visible:
+		_open_options()
+	if _open_city != NO_CITY:
+		_refresh_city_ui()
+		_frame_city(state.get_city(_open_city))
+
+
+func _toggle_options() -> void:
+	if options_panel.visible:
+		options_panel.hide()
+	else:
+		_open_options()
+
+
+func _open_options() -> void:
+	var ids := AdvisorDefs.ids()
+	options_panel.open({
+		"ui_scale": ui_layout.ui_scale_setting,
+		"scale": UiLayout.scale,
+		"layout": ui_layout.layout_setting,
+		"advisor_on": state.advisor.enabled if state != null else true,
+		"advisor_name": AdvisorDefs.display_name(ids[0]) if not ids.is_empty() else "The advisor",
+		"controls": _controls_text(),
+	})
+
+
+## Every control, one per line (the Options panel; the key-hint line only
+## has room for the short version).
+func _controls_text() -> String:
+	if _touch_mode:
+		return "\n".join([
+			"Tap: select a unit, city or tile",
+			"Tap a tile, then tap it again: move or attack",
+			"Hold: move onto your own units, or show a tile",
+			"Drag: pan   ·   Pinch: zoom",
+			"Hold a stat icon: see it in full",
+		])
+	return "\n".join([
+		"Left-click: select   ·   Right-click: move or attack",
+		"B: found city   ·   F: fortify   ·   X: explore   ·   Space: skip",
+		"Enter: end turn   ·   T: techs   ·   R: new world   ·   Esc: close",
+		"WASD or arrows: pan   ·   Wheel: zoom",
+	])
 
 
 func _autosave() -> void:
@@ -590,7 +681,19 @@ func _open_city_panel(city_id: int) -> void:
 	info_panel.hide()
 	_open_city = city_id
 	_refresh_city_ui()
-	camera.ensure_visible(map_view.grid_to_world(state.get_city(city_id).position))
+	_frame_city(state.get_city(city_id))
+
+
+## Keeps the open city in view: above the bottom sheet in the compact
+## layout, anywhere central otherwise.
+func _frame_city(city: CityState) -> void:
+	if city == null:
+		return
+	var covered := city_panel.covered_fraction()
+	if covered > 0.0:
+		camera.frame_at(map_view.grid_to_world(city.position), (1.0 - covered) / 2.0)
+	else:
+		camera.ensure_visible(map_view.grid_to_world(city.position))
 
 
 func _close_city() -> void:
@@ -673,7 +776,7 @@ func _refresh_city_ui() -> void:
 		"available": available,
 		"buildings": building_names,
 		"queue_wonders": queue_wonders,
-		"wonders": _wonder_status(city),
+		"wonder_lines": _wonder_status(city),
 		"trade": total[Yields.TRADE],
 		"science": int(state.players[city.owner]["science"]),
 		"science_per_turn": CityRules.science(state, city),
@@ -697,9 +800,9 @@ func _refresh_city_ui() -> void:
 	city_overlay.show_tiles(tiles)
 
 
-## One line on every wonder from this city's point of view, to tease what's
+## One line per wonder from this city's point of view, to tease what's
 ## next: built (where), being built, available, or the tech it needs.
-func _wonder_status(city: CityState) -> String:
+func _wonder_status(city: CityState) -> PackedStringArray:
 	var parts := PackedStringArray()
 	for id in WonderDefs.ids():
 		var wonder_name := WonderDefs.display_name(id)
@@ -716,7 +819,7 @@ func _wonder_status(city: CityState) -> String:
 			parts.append("%s: available" % wonder_name)
 		else:
 			parts.append("%s: needs %s" % [wonder_name, TechDefs.display_name(TechDefs.required_for(id))])
-	return "Wonders   " + "   ·   ".join(parts)
+	return parts
 
 
 # --- Wonders and the end of the game --------------------------------------------
@@ -1166,7 +1269,7 @@ func _show_tile_info(cell: Vector2i) -> void:
 	var cost := "Impassable on foot" if not TerrainDefs.passable_by_land(id) \
 		else "Move cost %d" % TerrainDefs.move_cost(id)
 	var y := Yields.tile(state.map, cell)
-	var details := "Tile (%d, %d)   ·   %s\nFood %d   ·   Production %d   ·   Trade %d" % [cell.x, cell.y, cost, y.x, y.y, y.z]
+	var details := "%s   ·   tile (%d, %d)" % [cost, cell.x, cell.y]
 	if TerrainDefs.defense_percent(id) > 0:
 		details += "   ·   Defense +%d%%" % TerrainDefs.defense_percent(id)
 	var camp := state.camp_at(cell)
@@ -1176,7 +1279,7 @@ func _show_tile_info(cell: Vector2i) -> void:
 		for enemy in state.enemy_units_at(cell, PLAYER):
 			details += "\nBarbarian %s   ·   HP %d/%d%s" % [_unit_name(enemy), enemy.hp, Combat.max_hp(),
 				"   ·   fortified" if enemy.fortified else ""]
-	info_panel.show_info(def["name"], details, Color.html(def["placeholder_color"]))
+	info_panel.show_info(def["name"], details, Color.html(def["placeholder_color"]), y)
 
 
 func _is_visible(cell: Vector2i) -> bool:

@@ -64,6 +64,16 @@ func ensure_visible(world_pos: Vector2) -> void:
 	_glide.tween_property(self, "position", _clamped(world_pos), GLIDE_TIME)
 
 
+## Glides so `world_pos` sits at `height_fraction` of the screen's height
+## (0 = top), e.g. above a bottom sheet.
+func frame_at(world_pos: Vector2, height_fraction: float) -> void:
+	var view := get_viewport_rect().size / zoom.x
+	var target := world_pos + Vector2(0, (0.5 - height_fraction) * view.y)
+	_stop_glide()
+	_glide = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_glide.tween_property(self, "position", _clamped(target), GLIDE_TIME)
+
+
 ## Moves the view by a finger drag: the map follows the finger.
 func pan_screen(delta: Vector2) -> void:
 	_stop_glide()
