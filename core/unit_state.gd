@@ -27,6 +27,11 @@ var home_city: int = NONE
 var camp_id: int = NONE
 ## Barbarians: currently visible to the human player (so a sighting warns once).
 var spotted: bool = false
+## On auto-explore (see Exploration): moves itself each turn, needs no orders.
+var exploring: bool = false
+## While exploring: barbarian units and camps already in its sight when it
+## last looked ("unit:<id>", "camp:<id>"), so only new ones wake it.
+var explore_ignored: Array[String] = []
 
 
 func max_moves() -> int:
@@ -44,7 +49,13 @@ func clear_orders() -> void:
 
 ## True when the player still has to decide what this unit does this turn.
 func needs_orders() -> bool:
-	return moves_left > 0 and not has_goal() and not fortified
+	return moves_left > 0 and not has_goal() and not fortified and not exploring
+
+
+## Ends auto-explore (a new order, or it woke up).
+func stop_exploring() -> void:
+	exploring = false
+	explore_ignored.clear()
 
 
 func to_dict() -> Dictionary:
@@ -65,6 +76,8 @@ func to_dict() -> Dictionary:
 		"home_city": home_city,
 		"camp_id": camp_id,
 		"spotted": spotted,
+		"exploring": exploring,
+		"explore_ignored": Array(explore_ignored),
 	}
 
 
@@ -85,6 +98,10 @@ static func from_dict(data: Dictionary) -> UnitState:
 	unit.home_city = int(data.get("home_city", NONE))
 	unit.camp_id = int(data.get("camp_id", NONE))
 	unit.spotted = bool(data.get("spotted", false))
+	# Missing before save version 8: not exploring.
+	unit.exploring = bool(data.get("exploring", false))
+	for entry: Variant in data.get("explore_ignored", []):
+		unit.explore_ignored.append(String(entry))
 	return unit
 
 

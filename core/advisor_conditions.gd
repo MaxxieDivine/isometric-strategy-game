@@ -5,7 +5,8 @@ extends RefCounted
 ## advisor's own memory ("memory.<key>"). Read only.
 ##
 ## Facts: turn, city_count, unit_count, idle_city_count, research_chosen,
-## known_tech_count, event_unit_can_found, memory.<key> (null if unset).
+## known_tech_count, event_unit_can_found, event_item (the built item's id,
+## "" if none), memory.<key> (null if unset).
 ## Ops: ==, !=, <, <=, >, >=.
 
 
@@ -39,6 +40,8 @@ static func fact(name: String, state: GameState, player_id: int, event: Dictiona
 			return Research.current(state, player_id) != ""
 		"known_tech_count":
 			return Research.known(state, player_id).size()
+		"event_item":
+			return String(event.get("item", ""))
 		"event_unit_can_found":
 			var unit := state.get_unit(int(event.get("unit_id", -1)))
 			return unit != null and UnitDefs.can_found_city(unit.type)

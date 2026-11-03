@@ -4,6 +4,7 @@
 		{ "id": "settler", "name": "Settler", "domain": "land", "moves": 1, "attack": 0, "defense": 1, "can_found_city": true,  "cost": 30, "min_city_size": 2, "pop_cost": 1, "sprite": "unit_settler" },
 		{ "id": "warrior", "name": "Warrior", "domain": "land", "moves": 1, "attack": 1, "defense": 1, "can_found_city": false, "cost": 10, "sprite": "unit_warrior" },
 		{ "id": "horseman", "name": "Horseman", "domain": "land", "moves": 2, "attack": 2, "defense": 1, "can_found_city": false, "cost": 20, "sprite": "unit_horseman" },
-		{ "id": "archer",   "name": "Archer",   "domain": "land", "moves": 1, "attack": 3, "defense": 2, "can_found_city": false, "cost": 30, "sprite": "unit_archer" }
+		{ "id": "archer",   "name": "Archer",   "domain": "land", "moves": 1, "attack": 3, "defense": 2, "can_found_city": false, "cost": 30, "sprite": "unit_archer" },
+		{ "id": "scout",    "name": "Scout",    "domain": "land", "moves": 3, "attack": 0, "defense": 1, "can_found_city": false, "cost": 15, "sight": 2, "ignores_terrain": true, "letter": "Sc", "sprite": "unit_scout" }
 	]
 }

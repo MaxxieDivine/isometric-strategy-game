@@ -161,7 +161,8 @@ static func event_values(state: GameState, player_id: int, event: Dictionary) ->
 
 ## Ranks sites around the settler (the event's unit, else the player's first
 ## settler) and lets the advisor's policy choose one. Returns { cell, values }
-## with site_where, site_direction, site_distance, site_terrain; {} if none.
+## with site_where, site_direction, site_distance, site_steps ("1 step",
+## "3 steps"), site_terrain; {} if none.
 static func suggest_city_site(state: GameState, player_id: int, advisor_id: String, event: Dictionary,
 		choice: String) -> Dictionary:
 	var settler := state.get_unit(int(event.get("unit_id", -1)))
@@ -181,6 +182,7 @@ static func suggest_city_site(state: GameState, player_id: int, advisor_id: Stri
 	var distance := IsoGrid.step_distance(settler.position, cell)
 	var values := {
 		"site_distance": distance,
+		"site_steps": "1 step" if distance == 1 else "%d steps" % distance,
 		"site_direction": direction_word(settler.position, cell),
 		"site_terrain": String(TerrainDefs.get_def(state.map.get_terrain(cell))["name"]).to_lower(),
 	}

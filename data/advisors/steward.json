@@ -13,7 +13,7 @@
 	"policies": { "city_site": "best" },
 	"phrases": {
 		"site_here": "right where our settlers stand",
-		"site_away": "{site_distance} steps to the {site_direction}"
+		"site_away": "{site_steps} to the {site_direction}"
 	},
 	"triggers": [
 		{
@@ -58,6 +58,21 @@
 			"lines": [
 				{ "tone": "warm", "text": "{city_name} stands! Every great realm began as one city like this." },
 				{ "tone": "warm", "text": "Listen to that: the first hearths of {city_name}. Keep it fed and busy, and it will grow." }
+			]
+		},
+		{
+			"id": "first_scout",
+			"event": "city_built",
+			"conditions": [
+				{ "fact": "event_item", "op": "==", "value": "scout" }
+			],
+			"once": true,
+			"cooldown": 0,
+			"priority": 60,
+			"carry_over": 2,
+			"lines": [
+				{ "tone": "warm", "text": "{city_name} has trained a scout. Give it the Explore order and it will map the land by itself, and come back to you if it meets trouble." },
+				{ "tone": "warm", "text": "A scout, swift and sharp-eyed! Choose Explore and it will roam the unknown on its own, turn after turn." }
 			]
 		},
 		{

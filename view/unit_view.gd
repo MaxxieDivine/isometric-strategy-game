@@ -53,7 +53,8 @@ var _fighting := false
 
 func setup(id: int, def: Dictionary, owner_color: Color, max_hp: int) -> void:
 	unit_id = id
-	_letter = String(def.get("name", "?")).left(1).to_upper()
+	# Data may give a short label ("Sc") where first letters would clash.
+	_letter = String(def.get("letter", String(def.get("name", "?")).left(1).to_upper()))
 	_color = owner_color
 	_texture = SpriteLibrary.get_texture(String(def.get("sprite", "")))
 	_max_hp = max_hp

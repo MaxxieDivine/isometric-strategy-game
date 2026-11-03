@@ -271,7 +271,7 @@ static func _step(state: GameState, unit: UnitState, cell: Vector2i) -> Array[Di
 	if defender != null:
 		events.append(Combat.resolve(state, unit, defender))
 		return events
-	var cost := Movement.enter_cost(state.map, ALL_KNOWN, cell, UnitDefs.domain(unit.type))
+	var cost := Movement.unit_enter_cost(state.map, ALL_KNOWN, cell, unit.type)
 	if not Movement.can_enter(unit.moves_left, unit.max_moves(), cost):
 		unit.moves_left = 0
 		return events

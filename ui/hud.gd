@@ -1,7 +1,7 @@
 class_name Hud
 extends Control
 ## Top bar (score, research indicator, tech tree and advisor buttons, turn/year), End Turn,
-## Found City, Fortify and Skip buttons, key hints, a notification card for batched
+## Found City, Fortify, Skip and Explore buttons, key hints, a notification card for batched
 ## turn news (with highlights and warnings; clickable when it points at a
 ## place), the attack-odds tag, and the idle-city prompt.
 
@@ -13,6 +13,7 @@ signal research_clicked
 signal tech_tree_requested
 signal fortify_requested
 signal skip_requested
+signal explore_requested
 ## The turn card was clicked while it pointed at a place on the map.
 signal notice_clicked
 ## The advisor on/off button was pressed.
@@ -39,6 +40,7 @@ var _end_turn_button: Button
 var _found_city_button: Button
 var _fortify_button: Button
 var _skip_button: Button
+var _explore_button: Button
 var _tree_button: Button
 var _advisor_button: Button
 var _touch_mode := false
@@ -116,6 +118,9 @@ func _ready() -> void:
 	_skip_button = _make_button("Skip  (Space)", 2)
 	_skip_button.pressed.connect(func() -> void: skip_requested.emit())
 	_skip_button.hide()
+	_explore_button = _make_button("Explore  (X)", 3)
+	_explore_button.pressed.connect(func() -> void: explore_requested.emit())
+	_explore_button.hide()
 	_build_odds_tag()
 
 	_hint_label = Label.new()
@@ -471,6 +476,10 @@ func set_skip_visible(shown: bool) -> void:
 	_skip_button.visible = shown
 
 
+func set_explore_visible(shown: bool) -> void:
+	_explore_button.visible = shown
+
+
 ## On a touch screen the buttons drop their keyboard shortcuts.
 func set_touch_mode(enabled: bool) -> void:
 	if enabled == _touch_mode:
@@ -479,6 +488,7 @@ func set_touch_mode(enabled: bool) -> void:
 	_found_city_button.text = "Found City" if enabled else "Found City  (B)"
 	_fortify_button.text = "Fortify" if enabled else "Fortify  (F)"
 	_skip_button.text = "Skip" if enabled else "Skip  (Space)"
+	_explore_button.text = "Explore" if enabled else "Explore  (X)"
 	_tree_button.text = "Techs" if enabled else "Techs (T)"
 	if not _turn_done:
 		_end_turn_button.text = "End Turn"

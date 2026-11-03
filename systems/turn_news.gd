@@ -84,6 +84,19 @@ static func describe(state: GameState, events: Array[Dictionary], viewer: int) -
 						warnings.append("Barbarians spotted%s!" % place)
 					if jump == Vector2i(-1, -1):
 						jump = event["cell"]
+			"explore_stopped":
+				var explorer := state.get_unit(int(event["unit_id"]))
+				if explorer != null and explorer.owner == viewer:
+					var who := _type_name(event["unit_type"])
+					match String(event["reason"]):
+						Exploration.FINISHED:
+							lines.append("%s finished exploring" % who)
+						Exploration.BARBARIANS:
+							lines.append("%s spotted barbarians and is waiting for orders" % who)
+						Exploration.HURT:
+							lines.append("%s is wounded and stopped exploring" % who)
+					if jump == Vector2i(-1, -1):
+						jump = event["cell"]
 			"camp_discovered":
 				if int(event["player"]) == viewer:
 					lines.append("Barbarian camp found%s. Clear it out for a reward" % _place(state, event["cell"], viewer))

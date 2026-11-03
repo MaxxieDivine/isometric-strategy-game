@@ -15,6 +15,7 @@ const DEFAULT_KEYS := {
 	"regenerate_map": [KEY_R],
 	"tech_tree": [KEY_T],
 	"fortify": [KEY_F],
+	"explore": [KEY_X],
 }
 
 

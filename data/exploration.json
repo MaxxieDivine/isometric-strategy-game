@@ -1,0 +1,5 @@
+{
+	"version": 1,
+	"danger_step_cost": 6,
+	"stop_below_hp_percent": 50
+}

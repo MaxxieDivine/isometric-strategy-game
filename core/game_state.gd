@@ -12,7 +12,9 @@ extends RefCounted
 ##    the default turn limit, and 0 camps destroyed.
 ## 7: `advisor` (AdvisorState: spoken triggers, cooldowns, advice log, its own
 ##    RNG). Older saves start with a fresh advisor that has said nothing yet.
-const VERSION := 7
+## 8: units gained `exploring` and `explore_ignored` (auto-explore). Older
+##    saves load with no unit exploring.
+const VERSION := 8
 
 var map: MapState
 var turn: int = 1

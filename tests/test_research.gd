@@ -165,7 +165,8 @@ func _test_unlock_gating() -> void:
 	var state := _make_state()
 	var city := _found_at(state, CENTER)
 	var items := Production.available_items(state, city)
-	_check(Array(items) == ["settler", "warrior"], "a new civ can only build settlers and warriors (got %s)" % [items])
+	_check(Array(items) == ["settler", "warrior", "scout"],
+		"a new civ can only build settlers, warriors and scouts (got %s)" % [items])
 	var refused := GameActions.enqueue_build(state, city.id, "library")
 	_check(refused[0]["type"] == "build_failed" and String(refused[0]["reason"]) == "Library needs Writing",
 		"queueing a locked building is refused with a reason")
